@@ -50,11 +50,11 @@ class JoystickMapper(QObject):
         axes = snap.get("axes", [])
         buttons = snap.get("buttons", [])
 
-        throttle = -axes[1] if len(axes) > 1 else 0.0
-        turn = axes[0] if len(axes) > 0 else 0.0
-
-        left = throttle + turn
-        right = throttle - turn
+        throttleLeft = -axes[1] if len(axes) > 1 else 0.0
+        throttleRight = -axes[3] if len(axes) > 3 else 0.0
+        
+        left = throttleLeft
+        right = throttleRight
         left = max(-1.0, min(1.0, left))
         right = max(-1.0, min(1.0, right))
 
