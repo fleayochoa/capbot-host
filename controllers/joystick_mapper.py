@@ -17,7 +17,7 @@ from core.state import state
 from network.udp_client import UdpClient
 
 
-MAX_SPEED = 32768  # algo menos que int16 para margen
+MAX_SPEED = 32767  # algo menos que int16 para margen
 
 
 class JoystickMapper(QObject):
