@@ -36,8 +36,8 @@ host_dashboard/
 
 ## Principios de diseño
 
-1. **Señales Qt como único pegamento entre capas.** Ningún widget importa clientes de red;
-   todos consumen señales del `SignalBus` global. Esto permite mockear la red en tests.
+1. **Señales Qt como única unión entre capas.** Ningún widget importa clientes de red;
+   todos consumen señales del `SignalBus` global.
 2. **Cada cliente de red vive en su propio QThread.** El hilo UI nunca se bloquea.
 3. **Reconexión automática en todas las capas** (joystick, WebSocket, video) con backoff.
 4. **Reintentos de emergencia gestionados por el cliente UDP**, no por la UI.
@@ -48,11 +48,8 @@ host_dashboard/
 PyQt6>=6.6
 pygame>=2.5
 websockets>=12.0
-# Para video: GStreamer con bindings Python (PyGObject) y plugins gst-plugins-{base,good,bad}
+# Para video: GStreamer pip install gstreamer-bundle
 ```
-
-En Windows, GStreamer se instala desde https://gstreamer.freedesktop.org/download/
-(runtime + development) y se añade `<gst>/bin` al PATH.
 
 ## Ejecución
 

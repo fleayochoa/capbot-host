@@ -4,10 +4,6 @@ Este módulo expone un singleton `bus` que re-emite todos los eventos del sistem
 Los widgets se conectan a las señales relevantes sin conocer a los productores;
 los productores (clientes de red, controllers) emiten sin conocer a los consumidores.
 
-Esto desacopla totalmente la UI de la red y permite:
-  - Sustituir clientes reales por mocks en tests
-  - Añadir nuevos widgets sin tocar la capa de red
-  - Reutilizar el mismo bus para logging/grabación
 """
 from PyQt6.QtCore import QObject, pyqtSignal
 

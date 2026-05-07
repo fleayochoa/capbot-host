@@ -3,7 +3,7 @@
 Convención por defecto (ajustable):
     - Eje 1 (stick izq vertical)  -> throttle (invertido: arriba = +)
     - Eje 0 (stick izq horizontal) -> giro diferencial
-    - Botón 0 (A/Cross)            -> emergencia
+    - Botón 0                      -> emergencia
 Se aplica mezcla diferencial sencilla: L = throttle + turn, R = throttle - turn,
 clamp a int16.
 """

@@ -8,14 +8,6 @@ QImage que se re-emiten por el bus.
 Si GStreamer no está disponible en el sistema, el módulo emite un estado de
 error y no crashea: el resto del dashboard sigue funcionando.
 
-Pipeline típica de recepción:
-    udpsrc port=5000 caps="application/x-rtp,media=video,encoding-name=H264,payload=96"
-      ! rtpjitterbuffer latency=50
-      ! rtph264depay
-      ! avdec_h264
-      ! videoconvert
-      ! video/x-raw,format=RGB
-      ! appsink name=sink emit-signals=true max-buffers=2 drop=true sync=false
 """
 from __future__ import annotations
 
