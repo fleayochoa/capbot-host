@@ -25,7 +25,21 @@ class MsgType(IntEnum):
     CMD_MOTOR = 0x01
     CMD_HEARTBEAT = 0x02
     CMD_EMERGENCY = 0x03
+    CMD_PID_PARAM = 0x04      # payload: ctrl_id(1) param_id(1) float32(4)
+    CMD_SETPOINT_COMP = 0x05  # payload: comp_id(1) reserved(1) float32(4)
     ACK = 0x81
+
+
+# Controller IDs for CMD_PID_PARAM
+CTRL_LINEAR_POS = 0
+CTRL_LINEAR_VEL = 1
+CTRL_ANG_POS = 2
+CTRL_ANG_VEL = 3
+
+# Parameter IDs for CMD_PID_PARAM
+PARAM_KP = 0
+PARAM_KI = 1
+PARAM_KD = 2
 
 
 # ------------------------------------------------------------
@@ -97,6 +111,18 @@ def build_heartbeat(seq: int) -> bytes:
 
 def build_emergency(seq: int) -> bytes:
     return Frame(MsgType.CMD_EMERGENCY, seq, b"\x00" * 6).pack()
+
+
+def build_pid_param(seq: int, ctrl_id: int, param_id: int, value: float) -> bytes:
+    """One PID constant. ctrl_id / param_id use CTRL_* / PARAM_* constants."""
+    payload = struct.pack("<BBf", ctrl_id & 0xFF, param_id & 0xFF, value)
+    return Frame(MsgType.CMD_PID_PARAM, seq, payload).pack()
+
+
+def build_setpoint_comp(seq: int, comp_id: int, value: float) -> bytes:
+    """One setpoint component. comp_id: 0=xPos 1=yPos 2=angPos 3=linVel 4=angVel."""
+    payload = struct.pack("<BBf", comp_id & 0xFF, 0, value)
+    return Frame(MsgType.CMD_SETPOINT_COMP, seq, payload).pack()
 
 
 def parse_ack(frame: Frame) -> int:

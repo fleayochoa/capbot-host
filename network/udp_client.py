@@ -31,6 +31,8 @@ from protocol.udp_frame import (
     build_emergency,
     build_heartbeat,
     build_motor_cmd,
+    build_pid_param,
+    build_setpoint_comp,
     parse_ack,
 )
 
@@ -128,6 +130,16 @@ class UdpClient(QObject):
         seq = self._next_seq()
         data = build_heartbeat(seq)
         self._send_raw(data)
+
+    def send_pid_params(self, params: list) -> None:
+        """Fire-and-forget: send all PID constants. params = [(ctrl_id, param_id, value), ...]"""
+        for ctrl_id, param_id, value in params:
+            self._send_raw(build_pid_param(self._next_seq(), ctrl_id, param_id, value))
+
+    def send_setpoint(self, components: list) -> None:
+        """Fire-and-forget: send 5 setpoint components [xPos, yPos, angPos, linVel, angVel]."""
+        for comp_id, value in enumerate(components):
+            self._send_raw(build_setpoint_comp(self._next_seq(), comp_id, value))
 
     def send_emergency(self) -> None:
         """Paro de emergencia: 20 ms x 50 intentos máx."""

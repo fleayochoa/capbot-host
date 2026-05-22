@@ -58,22 +58,25 @@ class JoystickDock(QDockWidget):
         self._status = QLabel("Sin mando")
         self._status.setStyleSheet("font-weight:bold; padding:4px;")
 
-        # Ejes
+        # Ejes — 2×4 grid (col 0-2 = left group, col 3-5 = right group)
         axes_box = QWidget()
         axes_lay = QGridLayout(axes_box)
         axes_lay.setContentsMargins(4, 4, 4, 4)
+        axes_lay.setSpacing(2)
         self._axis_bars: list[_AxisBar] = []
         self._axis_labels: list[QLabel] = []
         for i in range(self.MAX_AXES):
+            row = i % 4
+            col_base = (i // 4) * 3  # group 0 → cols 0-2, group 1 → cols 3-5
             lbl = QLabel(f"Eje {i}")
-            lbl.setFixedWidth(50)
+            lbl.setFixedWidth(38)
             bar = _AxisBar()
             val = QLabel("0.00")
-            val.setFixedWidth(44)
+            val.setFixedWidth(36)
             val.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            axes_lay.addWidget(lbl, i, 0)
-            axes_lay.addWidget(bar, i, 1)
-            axes_lay.addWidget(val, i, 2)
+            axes_lay.addWidget(lbl, row, col_base)
+            axes_lay.addWidget(bar, row, col_base + 1)
+            axes_lay.addWidget(val, row, col_base + 2)
             self._axis_bars.append(bar)
             self._axis_labels.append(val)
 
@@ -85,7 +88,7 @@ class JoystickDock(QDockWidget):
         self._btn_labels: list[QLabel] = []
         for i in range(self.MAX_BTNS):
             b = QLabel(str(i))
-            b.setFixedSize(28, 22)
+            b.setFixedSize(22, 18)
             b.setAlignment(Qt.AlignmentFlag.AlignCenter)
             b.setStyleSheet(self._btn_style(False))
             btn_lay.addWidget(b, i // 8, i % 8)
