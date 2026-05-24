@@ -41,6 +41,10 @@ class SignalBus(QObject):
     # Resultado del handshake de emergencia: True si recibió ACK, False si agotó reintentos
     emergency_acknowledged = pyqtSignal(bool, int)  # (ok, retries_used)
 
+    # ---------- Modo de conducción ----------
+    # 0 = manual, 1 = autónomo — se dispara al presionar botón del mando
+    mode_switch_requested = pyqtSignal(int)
+
 
 # Singleton
 bus = SignalBus()

@@ -21,6 +21,7 @@ class SystemState:
     last_rtt_ms: Optional[float] = None
 
     emergency_active: bool = False
+    drive_mode: str = "manual"  # "manual" | "autonomous"
 
     def mark_telemetry(self, data: dict) -> None:
         self.last_telemetry = data

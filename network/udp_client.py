@@ -30,6 +30,7 @@ from protocol.udp_frame import (
     MsgType,
     build_emergency,
     build_heartbeat,
+    build_mode_cmd,
     build_motor_cmd,
     build_pid_param,
     build_setpoint_comp,
@@ -69,6 +70,7 @@ class UdpClient(QObject):
 
         # Conectar señal de emergencia del bus a nuestra acción
         bus.emergency_requested.connect(self.send_emergency)
+        bus.mode_switch_requested.connect(self.send_mode)
 
     # -------------------------------------------------------------
     # Lifecycle
@@ -140,6 +142,17 @@ class UdpClient(QObject):
         """Fire-and-forget: send 5 setpoint components [xPos, yPos, angPos, linVel, angVel]."""
         for comp_id, value in enumerate(components):
             self._send_raw(build_setpoint_comp(self._next_seq(), comp_id, value))
+
+    def send_mode(self, mode: int) -> None:
+        """Cambia modo de conducción: 0=manual, 1=autónomo. Con reintentos."""
+        seq = self._next_seq()
+        data = build_mode_cmd(seq, mode)
+        self._enqueue(_PendingCmd(
+            seq=seq,
+            data=data,
+            retries_left=NETWORK.cmd_max_retries,
+            interval_s=NETWORK.cmd_ack_timeout_ms / 1000.0,
+        ))
 
     def send_emergency(self) -> None:
         """Paro de emergencia: 20 ms x 50 intentos máx."""
