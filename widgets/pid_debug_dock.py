@@ -70,8 +70,8 @@ class PidDebugDock(QDockWidget):
             pid_lay.addWidget(QLabel(ctrl_name), row, 0)
             for col, (param_id, _) in enumerate(_PARAMS, start=1):
                 spin = QDoubleSpinBox()
-                spin.setRange(0.0, 9999.0)
-                spin.setDecimals(4)
+                spin.setRange(0.0, 999999.0)
+                spin.setDecimals(6)
                 spin.setSingleStep(0.01)
                 spin.setValue(0.0)
                 pid_lay.addWidget(spin, row, col)
@@ -81,17 +81,21 @@ class PidDebugDock(QDockWidget):
         sp_group = QGroupBox("Setpoint")
         sp_lay = QVBoxLayout(sp_group)
         sp_lay.setContentsMargins(6, 6, 6, 6)
-        hint = QLabel("xPos, yPos, angPos, linVel, angVel")
+        hint = QLabel("xPos, yPos, angPos")
         hint.setStyleSheet("color:#888; font-size:10px;")
         self._sp_edit = QLineEdit()
-        self._sp_edit.setPlaceholderText("0.0, 0.0, 0.0, 0.0, 0.0")
+        self._sp_edit.setPlaceholderText("0.0, 0.0, 0.0")
         sp_lay.addWidget(hint)
         sp_lay.addWidget(self._sp_edit)
 
-        # ── Send + status ─────────────────────────────────────────────
-        self._send_btn = QPushButton("Enviar")
-        self._send_btn.setStyleSheet(_BTN_STYLE)
-        self._send_btn.clicked.connect(self._on_send)
+        # ── Buttons + status ──────────────────────────────────────────
+        self._send_pid_btn = QPushButton("Enviar PID")
+        self._send_pid_btn.setStyleSheet(_BTN_STYLE)
+        self._send_pid_btn.clicked.connect(self._on_send_pid)
+
+        self._send_sp_btn = QPushButton("Enviar Setpoint")
+        self._send_sp_btn.setStyleSheet(_BTN_STYLE)
+        self._send_sp_btn.clicked.connect(self._on_send_setpoint)
 
         self._status = QLabel("")
         self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -101,31 +105,33 @@ class PidDebugDock(QDockWidget):
         lay = QVBoxLayout(container)
         lay.setContentsMargins(6, 6, 6, 6)
         lay.addWidget(pid_group)
+        lay.addWidget(self._send_pid_btn)
         lay.addWidget(sp_group)
-        lay.addWidget(self._send_btn)
+        lay.addWidget(self._send_sp_btn)
         lay.addWidget(self._status)
         lay.addStretch(1)
         self.setWidget(container)
 
     # ──────────────────────────────────────────────────────────────────
-    def _on_send(self) -> None:
+    def _on_send_pid(self) -> None:
         pid_params = [
             (ctrl_id, param_id, spin.value())
             for (ctrl_id, param_id), spin in self._inputs.items()
         ]
+        self._udp.send_pid_params(pid_params)
+        self._status.setStyleSheet("color:#2ea043; font-size:10px; padding:2px;")
+        self._status.setText("Constantes PID enviadas")
 
-        sp_text = self._sp_edit.text().strip() or "0,0,0,0,0"
+    def _on_send_setpoint(self) -> None:
+        sp_text = self._sp_edit.text().strip() or "0,0,0"
         try:
             parts = [float(x.strip()) for x in sp_text.split(",")]
-            if len(parts) != 5:
-                raise ValueError(f"se esperan 5 valores, recibidos {len(parts)}")
+            if len(parts) != 3:
+                raise ValueError(f"se esperan 3 valores, recibidos {len(parts)}")
         except ValueError as exc:
             self._status.setStyleSheet("color:#d93f33; font-size:10px; padding:2px;")
             self._status.setText(f"Setpoint inválido: {exc}")
             return
-
-        self._udp.send_pid_params(pid_params)
         self._udp.send_setpoint(parts)
-
         self._status.setStyleSheet("color:#2ea043; font-size:10px; padding:2px;")
-        self._status.setText("Enviado")
+        self._status.setText("Setpoint enviado")
