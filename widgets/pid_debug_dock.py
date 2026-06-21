@@ -14,6 +14,8 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from core.signals import bus
+from core.state import state
 from network.udp_client import UdpClient
 from protocol.udp_frame import (
     CTRL_ANG_POS,
@@ -112,7 +114,26 @@ class PidDebugDock(QDockWidget):
         lay.addStretch(1)
         self.setWidget(container)
 
+        bus.emergency_requested.connect(self._on_emergency)
+        bus.emergency_acknowledged.connect(self._on_emergency_cleared)
+        if state.emergency_active:
+            self._set_blocked(True)
+
     # ──────────────────────────────────────────────────────────────────
+    def _set_blocked(self, blocked: bool) -> None:
+        self._send_pid_btn.setEnabled(not blocked)
+        self._send_sp_btn.setEnabled(not blocked)
+        if blocked:
+            self._status.setStyleSheet("color:#d93f33; font-size:10px; padding:2px;")
+            self._status.setText("Bloqueado: paro de emergencia activo")
+
+    def _on_emergency(self) -> None:
+        self._set_blocked(True)
+
+    def _on_emergency_cleared(self, ok: bool, retries: int) -> None:
+        self._set_blocked(False)
+        self._status.setText("")
+
     def _on_send_pid(self) -> None:
         pid_params = [
             (ctrl_id, param_id, spin.value())

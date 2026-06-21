@@ -155,7 +155,14 @@ class UdpClient(QObject):
         ))
 
     def send_emergency(self) -> None:
-        """Paro de emergencia: 20 ms x 50 intentos máx."""
+        """Paro de emergencia: 20 ms x 50 intentos máx. Tiene prioridad total:
+        descarta cualquier comando no-emergencia que esté en cola para que no
+        se cuele tráfico de motor/setpoint/PID detrás del paro."""
+        state.emergency_active = True
+        with self._pending_lock:
+            for s in [s for s, c in self._pending.items() if not c.is_emergency]:
+                self._pending.pop(s, None)
+
         seq = self._next_seq()
         data = build_emergency(seq)
         self._enqueue(_PendingCmd(
@@ -165,7 +172,6 @@ class UdpClient(QObject):
             interval_s=NETWORK.emergency_retry_ms / 1000.0,
             is_emergency=True,
         ))
-        state.emergency_active = True
 
     # -------------------------------------------------------------
     # Internals
@@ -179,13 +185,17 @@ class UdpClient(QObject):
             return s
 
     def _enqueue(self, cmd: _PendingCmd) -> None:
+        if state.emergency_active and not cmd.is_emergency:
+            return  # paro de emergencia activo: no se admiten comandos nuevos
         cmd.next_send_ts = time.time()
         with self._pending_lock:
             self._pending[cmd.seq] = cmd
 
-    def _send_raw(self, data: bytes) -> None:
+    def _send_raw(self, data: bytes, *, force: bool = False) -> None:
         if not self._sock:
             return
+        if state.emergency_active and not force:
+            return  # paro de emergencia activo: descarta tráfico no-emergencia
         try:
             self._sock.sendto(data, (NETWORK.jetson_host, NETWORK.udp_cmd_port))
         except OSError as exc:
@@ -201,7 +211,7 @@ class UdpClient(QObject):
                         due.append(cmd)
 
             for cmd in due:
-                self._send_raw(cmd.data)
+                self._send_raw(cmd.data, force=cmd.is_emergency)
                 cmd.retries_left -= 1
                 cmd.next_send_ts = now + cmd.interval_s
                 if cmd.retries_left <= 0:

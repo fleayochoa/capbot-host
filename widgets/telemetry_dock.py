@@ -30,6 +30,14 @@ _SAVE_BTN_STYLE = (
     "QPushButton:disabled { background:#444; color:#777; }"
 )
 
+_STOP_BTN_STYLE = (
+    "QPushButton { background:#b62324; color:white; font-weight:bold;"
+    "  padding:5px; border-radius:4px; }"
+    "QPushButton:hover { background:#d93f33; }"
+    "QPushButton:pressed { background:#8a1c1c; }"
+    "QPushButton:disabled { background:#444; color:#777; }"
+)
+
 
 class TelemetryDock(QDockWidget):
     def __init__(self, parent=None):
@@ -51,11 +59,17 @@ class TelemetryDock(QDockWidget):
         self._save_btn.setEnabled(False)
         self._save_btn.clicked.connect(self._on_save_csv)
 
+        self._stop_btn = QPushButton("Detener CSV")
+        self._stop_btn.setStyleSheet(_STOP_BTN_STYLE)
+        self._stop_btn.setEnabled(False)
+        self._stop_btn.clicked.connect(self._on_stop_csv)
+
         self._save_status = QLabel("")
         self._save_status.setStyleSheet("color:#aaa; font-size:10px; padding:2px;")
 
         btn_row = QHBoxLayout()
         btn_row.addWidget(self._save_btn)
+        btn_row.addWidget(self._stop_btn)
         btn_row.addWidget(self._save_status, 1)
 
         container = QWidget()
@@ -68,6 +82,9 @@ class TelemetryDock(QDockWidget):
 
         self._rows: dict[str, int] = {}
         self._history: list[dict] = []   # [{timestamp, key: value, ...}, ...]
+        self._csv_file = None
+        self._csv_writer = None
+        self._csv_keys: list[str] = []
 
         bus.telemetry_received.connect(self._on_telemetry)
         bus.rtt_updated.connect(self._on_rtt)
@@ -85,7 +102,9 @@ class TelemetryDock(QDockWidget):
         record = {"timestamp": datetime.datetime.now().isoformat(timespec="milliseconds")}
         record.update(flat)
         self._history.append(record)
-        self._save_btn.setEnabled(True)
+        if not self._csv_file:
+            self._save_btn.setEnabled(True)
+        self._stream_record(record)
         self._render_dict("", data)
 
     def _flatten(self, prefix: str, data: dict, out: dict[str, str]) -> None:
@@ -123,27 +142,52 @@ class TelemetryDock(QDockWidget):
         self._summary.setText(f"RTT último comando: {rtt_ms:.1f} ms")
 
     def _on_save_csv(self) -> None:
-        if not self._history:
-            return
         default_name = datetime.datetime.now().strftime("telemetry_%Y%m%d_%H%M%S.csv")
         path, _ = QFileDialog.getSaveFileName(
             self, "Guardar telemetría", default_name, "CSV (*.csv)"
         )
         if not path:
             return
-        all_keys: list[str] = list(
-            dict.fromkeys(k for rec in self._history for k in rec)
-        )
         try:
-            with open(path, "w", newline="", encoding="utf-8") as f:
-                writer = csv.DictWriter(f, fieldnames=all_keys, extrasaction="ignore")
-                writer.writeheader()
-                writer.writerows(self._history)
+            self._csv_keys = list(
+                dict.fromkeys(k for rec in self._history for k in rec)
+            ) or ["timestamp"]
+            self._csv_file = open(path, "w", newline="", encoding="utf-8")
+            self._csv_writer = csv.DictWriter(
+                self._csv_file, fieldnames=self._csv_keys, extrasaction="ignore"
+            )
+            self._csv_writer.writeheader()
+            self._csv_writer.writerows(self._history)
+            self._csv_file.flush()
+            self._save_btn.setEnabled(False)
+            self._stop_btn.setEnabled(True)
             self._save_status.setStyleSheet("color:#2ea043; font-size:10px; padding:2px;")
-            self._save_status.setText(f"Guardado: {os.path.basename(path)}")
+            self._save_status.setText(f"Grabando: {os.path.basename(path)}")
         except OSError as exc:
+            self._csv_file = None
+            self._csv_writer = None
             self._save_status.setStyleSheet("color:#d93f33; font-size:10px; padding:2px;")
             self._save_status.setText(f"Error: {exc}")
+
+    def _on_stop_csv(self) -> None:
+        if self._csv_file:
+            self._csv_file.close()
+            self._csv_file = None
+            self._csv_writer = None
+        self._stop_btn.setEnabled(False)
+        self._save_btn.setEnabled(bool(self._history))
+        self._save_status.setStyleSheet("color:#aaa; font-size:10px; padding:2px;")
+        self._save_status.setText("Grabación detenida")
+
+    def _stream_record(self, record: dict) -> None:
+        if not self._csv_writer:
+            return
+        new_keys = [k for k in record if k not in self._csv_keys]
+        if new_keys:
+            self._csv_keys.extend(new_keys)
+            self._csv_writer.fieldnames = self._csv_keys
+        self._csv_writer.writerow(record)
+        self._csv_file.flush()
 
     def _check_stale(self) -> None:
         if state.last_telemetry_ts == 0:

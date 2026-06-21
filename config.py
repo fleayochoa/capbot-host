@@ -9,7 +9,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class NetworkConfig:
     # IP del Jetson Nano. Se puede sobrescribir en runtime desde la UI.
-    jetson_host: str = "192.168.1.120"
+    jetson_host: str = "10.198.148.195"
 
     # Puertos según especificación
     video_port: int = 5000
