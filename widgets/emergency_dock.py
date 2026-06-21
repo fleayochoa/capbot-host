@@ -9,6 +9,7 @@ from PyQt6.QtCore import Qt, pyqtSlot
 from PyQt6.QtGui import QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QDockWidget,
+    QHBoxLayout,
     QLabel,
     QPushButton,
     QVBoxLayout,
@@ -60,6 +61,7 @@ class EmergencyDock(QDockWidget):
         hint = QLabel("Atajo: Barra espaciadora")
         hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hint.setStyleSheet("color:#666; font-size:10px;")
+
 
         container = QWidget()
         lay = QVBoxLayout(container)

@@ -18,6 +18,7 @@ from network.ws_client import WsClient
 from widgets.connection_dock import ConnectionDock
 from widgets.emergency_dock import EmergencyDock
 from widgets.joystick_dock import JoystickDock
+from widgets.pid_debug_dock import PidDebugDock
 from widgets.telemetry_dock import TelemetryDock
 from widgets.video_dock import VideoDock
 
@@ -41,17 +42,21 @@ class MainWindow(QMainWindow):
         self.joystick_dock = JoystickDock(self)
         self.connection_dock = ConnectionDock(self)
         self.emergency_dock = EmergencyDock(self)
+        self.pid_debug_dock = PidDebugDock(self.udp, self)
 
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.video_dock)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.telemetry_dock)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.joystick_dock)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.connection_dock)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.emergency_dock)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.pid_debug_dock)
 
         # Splits más sensatos: telemetría arriba, joystick abajo en la col derecha
         self.splitDockWidget(self.telemetry_dock, self.joystick_dock, Qt.Orientation.Vertical)
         # Video arriba y conexión abajo en la col izquierda
         self.splitDockWidget(self.video_dock, self.connection_dock, Qt.Orientation.Vertical)
+        # PID debug debajo del joystick
+        self.splitDockWidget(self.joystick_dock, self.pid_debug_dock, Qt.Orientation.Vertical)
 
         # ---------------- Menú ----------------
         self._build_menu()
@@ -82,6 +87,7 @@ class MainWindow(QMainWindow):
             self.joystick_dock,
             self.connection_dock,
             self.emergency_dock,
+            self.pid_debug_dock,
         ):
             view_menu.addAction(dock.toggleViewAction())
 
@@ -146,6 +152,7 @@ class MainWindow(QMainWindow):
             self.joystick_dock,
             self.connection_dock,
             self.emergency_dock,
+            self.pid_debug_dock,
         ):
             dock.setFloating(False)
             dock.show()
@@ -154,8 +161,10 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.joystick_dock)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.connection_dock)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.emergency_dock)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.pid_debug_dock)
         self.splitDockWidget(self.telemetry_dock, self.joystick_dock, Qt.Orientation.Vertical)
         self.splitDockWidget(self.video_dock, self.connection_dock, Qt.Orientation.Vertical)
+        self.splitDockWidget(self.joystick_dock, self.pid_debug_dock, Qt.Orientation.Vertical)
 
     # -------------------------------------------------------------
     def closeEvent(self, ev) -> None:

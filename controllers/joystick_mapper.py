@@ -16,6 +16,9 @@ from core.signals import bus
 from core.state import state
 from network.udp_client import UdpClient
 
+MODE_MANUAL = 0
+MODE_AUTONOMOUS = 1
+
 
 MAX_SPEED = 32767  # algo menos que int16 para margen
 
@@ -35,6 +38,7 @@ class JoystickMapper(QObject):
         self._last_l = 0
         self._last_r = 0
         self._last_emergency_btn = False
+        self._last_mode_btn = False
 
         bus.joystick_update.connect(self._on_joy)
         bus.joystick_state_changed.connect(self._on_joy_state)
@@ -69,6 +73,14 @@ class JoystickMapper(QObject):
         if btn0 and not self._last_emergency_btn:
             bus.emergency_requested.emit()
         self._last_emergency_btn = btn0
+
+        # Detección de flanco en botón 1 → alternar modo manual/autónomo
+        btn1 = buttons[1] if len(buttons) > 1 else False
+        if btn1 and not self._last_mode_btn:
+            new_mode = MODE_MANUAL if state.drive_mode == "autonomous" else MODE_AUTONOMOUS
+            state.drive_mode = "autonomous" if new_mode == MODE_AUTONOMOUS else "manual"
+            bus.mode_switch_requested.emit(new_mode)
+        self._last_mode_btn = btn1
 
     @pyqtSlot(str, str)
     def _on_joy_state(self, st: str, _name: str) -> None:
