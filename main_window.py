@@ -12,12 +12,14 @@ from PyQt6.QtWidgets import QMainWindow, QMessageBox
 import config
 from controllers.joystick import JoystickController
 from controllers.joystick_mapper import JoystickMapper
+from network.nav_client import NavClient
 from network.udp_client import UdpClient
 from network.video_receiver import VideoReceiver
 from network.ws_client import WsClient
 from widgets.connection_dock import ConnectionDock
 from widgets.emergency_dock import EmergencyDock
 from widgets.joystick_dock import JoystickDock
+from widgets.map_dock import MapDock
 from widgets.pid_debug_dock import PidDebugDock
 from widgets.telemetry_dock import TelemetryDock
 from widgets.video_dock import VideoDock
@@ -33,6 +35,7 @@ class MainWindow(QMainWindow):
         self.udp = UdpClient(self)
         self.ws = WsClient(self)
         self.video = VideoReceiver(self)
+        self.nav = NavClient(self)
         self.joystick = JoystickController(self)
         self.mapper = JoystickMapper(self.udp, self)
 
@@ -43,6 +46,7 @@ class MainWindow(QMainWindow):
         self.connection_dock = ConnectionDock(self)
         self.emergency_dock = EmergencyDock(self)
         self.pid_debug_dock = PidDebugDock(self.udp, self)
+        self.map_dock = MapDock(self)
 
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.video_dock)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.telemetry_dock)
@@ -50,6 +54,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.connection_dock)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.emergency_dock)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.pid_debug_dock)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.map_dock)
 
         # Splits más sensatos: telemetría arriba, joystick abajo en la col derecha
         self.splitDockWidget(self.telemetry_dock, self.joystick_dock, Qt.Orientation.Vertical)
@@ -57,6 +62,8 @@ class MainWindow(QMainWindow):
         self.splitDockWidget(self.video_dock, self.connection_dock, Qt.Orientation.Vertical)
         # PID debug debajo del joystick
         self.splitDockWidget(self.joystick_dock, self.pid_debug_dock, Qt.Orientation.Vertical)
+        # Mapa como pestaña junto al video en la col izquierda
+        self.tabifyDockWidget(self.video_dock, self.map_dock)
 
         # ---------------- Menú ----------------
         self._build_menu()
@@ -83,6 +90,7 @@ class MainWindow(QMainWindow):
         view_menu = bar.addMenu("&Ver")
         for dock in (
             self.video_dock,
+            self.map_dock,
             self.telemetry_dock,
             self.joystick_dock,
             self.connection_dock,
@@ -112,10 +120,12 @@ class MainWindow(QMainWindow):
         self.udp.start()
         self.ws.start()
         self.video.start()
+        self.nav.start()
         self.joystick.start()
 
     def _stop_all(self) -> None:
         self.joystick.stop()
+        self.nav.stop()
         self.video.stop()
         self.ws.stop()
         self.udp.stop()
@@ -131,6 +141,9 @@ class MainWindow(QMainWindow):
         if what in ("video", "all"):
             self.video.stop()
             self.video.start()
+        if what in ("nav", "all"):
+            self.nav.stop()
+            self.nav.start()
 
     @pyqtSlot(str)
     def _on_host_changed(self, host: str) -> None:
@@ -148,6 +161,7 @@ class MainWindow(QMainWindow):
         # Recrear layout básico
         for dock in (
             self.video_dock,
+            self.map_dock,
             self.telemetry_dock,
             self.joystick_dock,
             self.connection_dock,
@@ -162,9 +176,11 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.connection_dock)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, self.emergency_dock)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.pid_debug_dock)
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.map_dock)
         self.splitDockWidget(self.telemetry_dock, self.joystick_dock, Qt.Orientation.Vertical)
         self.splitDockWidget(self.video_dock, self.connection_dock, Qt.Orientation.Vertical)
         self.splitDockWidget(self.joystick_dock, self.pid_debug_dock, Qt.Orientation.Vertical)
+        self.tabifyDockWidget(self.video_dock, self.map_dock)
 
     # -------------------------------------------------------------
     def closeEvent(self, ev) -> None:

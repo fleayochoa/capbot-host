@@ -23,9 +23,19 @@ class SystemState:
     emergency_active: bool = False
     drive_mode: str = "manual"  # "manual" | "autonomous"
 
+    # ---------- Navegación / Mapa ----------
+    nav_state: str = "disconnected"
+    last_pose: dict = field(default_factory=dict)  # {x, y, yaw, valid, stamp}
+    last_pose_ts: float = 0.0
+    last_nav_status: dict = field(default_factory=dict)
+
     def mark_telemetry(self, data: dict) -> None:
         self.last_telemetry = data
         self.last_telemetry_ts = time.time()
+
+    def mark_pose(self, pose: dict) -> None:
+        self.last_pose = pose
+        self.last_pose_ts = time.time()
 
 
 state = SystemState()

@@ -3,6 +3,7 @@
 Todos los parámetros de red, timeouts y protocolo viven aquí para que cualquier
 cambio se propague sin tocar módulos de negocio.
 """
+import os
 from dataclasses import dataclass
 
 
@@ -55,7 +56,28 @@ class VideoConfig:
     fps: int = 30
 
 
+_ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+
+
+@dataclass(frozen=True)
+class NavConfig:
+    # Puerto del WebSocket de navegación expuesto por gui_bridge_node (ROS).
+    # Corre en la misma Jetson que la telemetría → reusa NETWORK.jetson_host.
+    gui_bridge_port: int = 8766
+
+    # Reconexión del cliente de navegación (ms)
+    nav_reconnect_ms: int = 1500
+    # Si no llega pose en este tiempo, se marca la pose como obsoleta (ms)
+    pose_stale_ms: int = 1000
+
+    # Assets del mapa para renderizar la GUI de forma autónoma (copia de
+    # capbot-ros/src/test_bot/maps/). Coinciden con el mapa que carga NAV2.
+    map_pgm: str = os.path.join(_ASSETS_DIR, "map.pgm")
+    map_yaml: str = os.path.join(_ASSETS_DIR, "map.yaml")
+
+
 NETWORK = NetworkConfig()
 PROTOCOL = ProtocolConfig()
 JOYSTICK = JoystickConfig()
 VIDEO = VideoConfig()
+NAV = NavConfig()

@@ -45,6 +45,18 @@ class SignalBus(QObject):
     # 0 = manual, 1 = autónomo — se dispara al presionar botón del mando
     mode_switch_requested = pyqtSignal(int)
 
+    # ---------- Navegación / Mapa ----------
+    # Estado de la conexión con gui_bridge_node (ROS): mismos valores que ws/udp
+    nav_state_changed = pyqtSignal(str, str)  # (state, detail)
+    # Pose real del robot en frame map: {x, y, yaw, valid, stamp}
+    robot_pose_updated = pyqtSignal(dict)
+    # Estado de navegación NAV2: {state, distance_remaining?}
+    nav_status_changed = pyqtSignal(dict)
+    # Objetivo solicitado desde la UI (mapa o campos): {x, y, yaw}
+    nav_goal_requested = pyqtSignal(dict)
+    # Cancelación del goal activo solicitada desde la UI
+    nav_cancel_requested = pyqtSignal()
+
 
 # Singleton
 bus = SignalBus()
