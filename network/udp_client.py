@@ -144,7 +144,7 @@ class UdpClient(QObject):
             self._send_raw(build_setpoint_comp(self._next_seq(), comp_id, value))
 
     def send_mode(self, mode: int) -> None:
-        """Cambia modo de conducción: 0=manual, 1=autónomo. Con reintentos."""
+        """Cambia modo de conducción: 0=manual, 1=autónomo, 2=nav2. Con reintentos."""
         seq = self._next_seq()
         data = build_mode_cmd(seq, mode)
         self._enqueue(_PendingCmd(

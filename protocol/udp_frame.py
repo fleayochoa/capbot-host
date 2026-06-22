@@ -27,7 +27,7 @@ class MsgType(IntEnum):
     CMD_EMERGENCY = 0x03
     CMD_PID_PARAM = 0x04      # payload: ctrl_id(1) param_id(1) float32(4)
     CMD_SETPOINT_COMP = 0x05  # payload: comp_id(1) reserved(1) float32(4)
-    CMD_MODE = 0x06           # payload: mode(1) reserved(5); 0=manual 1=autonomous
+    CMD_MODE = 0x06           # payload: mode(1) reserved(5); 0=manual 1=autonomous 2=nav2
     ACK = 0x81
 
 
@@ -127,7 +127,7 @@ def build_setpoint_comp(seq: int, comp_id: int, value: float) -> bytes:
 
 
 def build_mode_cmd(seq: int, mode: int) -> bytes:
-    """mode: 0 = manual, 1 = autónomo."""
+    """mode: 0 = manual, 1 = autónomo, 2 = nav2."""
     payload = struct.pack("<B5x", mode & 0xFF)
     return Frame(MsgType.CMD_MODE, seq, payload).pack()
 
