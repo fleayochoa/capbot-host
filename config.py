@@ -70,10 +70,12 @@ class NavConfig:
     # Si no llega pose en este tiempo, se marca la pose como obsoleta (ms)
     pose_stale_ms: int = 1000
 
-    # Assets del mapa para renderizar la GUI de forma autónoma (copia de
-    # capbot-ros/src/test_bot/maps/). Coinciden con el mapa que carga NAV2.
-    map_pgm: str = os.path.join(_ASSETS_DIR, "map.pgm")
-    map_yaml: str = os.path.join(_ASSETS_DIR, "map.yaml")
+    # Assets del mapa para renderizar la GUI de forma autónoma. Copia del mapa
+    # "small" (capbot-ros/src/test_bot/config/test_map_small.*), que es el que
+    # carga NAV2 por defecto (robot.launch.py map_name:=small). Debe coincidir
+    # con el mapa activo para que pose y goals queden alineados.
+    map_pgm: str = os.path.join(_ASSETS_DIR, "test_map_small.pgm")
+    map_yaml: str = os.path.join(_ASSETS_DIR, "test_map_small.yaml")
 
 
 NETWORK = NetworkConfig()

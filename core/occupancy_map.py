@@ -73,29 +73,51 @@ class OccupancyMap:
         return self.height * self.resolution
 
 
+def _coerce(val: str):
+    try:
+        return float(val)
+    except ValueError:
+        return val
+
+
 def _parse_yaml(path: str) -> dict:
     """Parser mínimo del map.yaml de ROS (sin PyYAML).
 
     Solo necesitamos `resolution` (float) y `origin` (lista de 3 floats). El
-    resto de claves se ignoran. Soporta `clave: valor` y listas `[a, b, c]`.
+    resto de claves se ignoran. Soporta `clave: valor`, listas inline
+    `[a, b, c]` y listas en bloque (ítems `- x` en líneas siguientes), que es
+    como nav2_map_server escribe el `origin`.
     """
     out: dict = {}
+    pending_key = None  # clave esperando ítems de una lista en bloque
     with open(path, "r", encoding="utf-8") as f:
         for line in f:
-            line = line.split("#", 1)[0].strip()
-            if not line or ":" not in line:
+            line = line.split("#", 1)[0].rstrip()
+            stripped = line.strip()
+            if not stripped:
                 continue
-            key, _, val = line.partition(":")
+            # Ítem de lista en bloque: "- valor"
+            if stripped.startswith("- ") or stripped == "-":
+                if pending_key is not None:
+                    out.setdefault(pending_key, []).append(
+                        _coerce(stripped[1:].strip()))
+                continue
+            if ":" not in stripped:
+                continue
+            key, _, val = stripped.partition(":")
             key = key.strip()
             val = val.strip()
+            if not val:
+                # Posible lista en bloque a continuación
+                pending_key = key
+                out[key] = []
+                continue
+            pending_key = None
             if val.startswith("[") and val.endswith("]"):
                 items = [v.strip() for v in val[1:-1].split(",") if v.strip()]
-                out[key] = [float(v) for v in items]
+                out[key] = [_coerce(v) for v in items]
             else:
-                try:
-                    out[key] = float(val)
-                except ValueError:
-                    out[key] = val
+                out[key] = _coerce(val)
     return out
 
 
