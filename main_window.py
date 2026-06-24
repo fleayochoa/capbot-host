@@ -6,12 +6,14 @@ Expone un menú Ver para mostrar/ocultar docks y guardar layout.
 from __future__ import annotations
 
 from PyQt6.QtCore import QSettings, Qt, pyqtSlot
-from PyQt6.QtGui import QAction, QKeySequence
-from PyQt6.QtWidgets import QMainWindow, QMessageBox
+from PyQt6.QtGui import QAction, QActionGroup, QKeySequence
+from PyQt6.QtWidgets import QLabel, QMainWindow, QMessageBox
 
 import config
 from controllers.joystick import JoystickController
 from controllers.joystick_mapper import JoystickMapper
+from core.modes import MODE_AUTONOMOUS, MODE_MANUAL, MODE_NAV2, set_drive_mode
+from core.signals import bus
 from network.udp_client import UdpClient
 from network.video_receiver import VideoReceiver
 from network.ws_client import WsClient
@@ -21,6 +23,12 @@ from widgets.joystick_dock import JoystickDock
 from widgets.pid_debug_dock import PidDebugDock
 from widgets.telemetry_dock import TelemetryDock
 from widgets.video_dock import VideoDock
+
+_MODE_LABEL = {
+    MODE_MANUAL: "Manual",
+    MODE_AUTONOMOUS: "Autónomo",
+    MODE_NAV2: "Nav2",
+}
 
 
 class MainWindow(QMainWindow):
@@ -60,10 +68,12 @@ class MainWindow(QMainWindow):
 
         # ---------------- Menú ----------------
         self._build_menu()
+        self._build_status_bar()
 
         # ---------------- Señales de UI ----------------
         self.connection_dock.reconnect_requested.connect(self._on_reconnect)
         self.connection_dock.host_changed.connect(self._on_host_changed)
+        bus.mode_switch_requested.connect(self._on_mode_changed)
 
         # ---------------- Arranque ----------------
         self._start_all()
@@ -106,6 +116,37 @@ class MainWindow(QMainWindow):
         quit_act.setShortcut(QKeySequence.StandardKey.Quit)
         quit_act.triggered.connect(self.close)
         sys_menu.addAction(quit_act)
+
+        mode_menu = bar.addMenu("&Modo")
+        self._mode_actions: dict[int, QAction] = {}
+        mode_group = QActionGroup(self)
+        mode_group.setExclusive(True)
+        for mode, shortcut in (
+            (MODE_MANUAL, "Ctrl+1"),
+            (MODE_AUTONOMOUS, "Ctrl+2"),
+            (MODE_NAV2, "Ctrl+3"),
+        ):
+            act = QAction(_MODE_LABEL[mode], self)
+            act.setShortcut(QKeySequence(shortcut))
+            act.setCheckable(True)
+            act.triggered.connect(lambda _checked=False, m=mode: set_drive_mode(m))
+            mode_group.addAction(act)
+            mode_menu.addAction(act)
+            self._mode_actions[mode] = act
+        self._mode_actions[MODE_MANUAL].setChecked(True)
+
+    # -------------------------------------------------------------
+    def _build_status_bar(self) -> None:
+        self._mode_status = QLabel(f"Modo: {_MODE_LABEL[MODE_MANUAL]}")
+        self._mode_status.setStyleSheet("padding: 0 8px;")
+        self.statusBar().addPermanentWidget(self._mode_status)
+
+    @pyqtSlot(int)
+    def _on_mode_changed(self, mode: int) -> None:
+        self._mode_status.setText(f"Modo: {_MODE_LABEL.get(mode, mode)}")
+        act = self._mode_actions.get(mode)
+        if act and not act.isChecked():
+            act.setChecked(True)
 
     # -------------------------------------------------------------
     def _start_all(self) -> None:

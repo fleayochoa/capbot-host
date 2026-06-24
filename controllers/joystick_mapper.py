@@ -14,20 +14,10 @@ from __future__ import annotations
 from PyQt6.QtCore import QObject, QTimer, pyqtSlot
 
 from config import NETWORK
+from core.modes import MODE_AUTONOMOUS, MODE_MANUAL, MODE_NAV2, set_drive_mode
 from core.signals import bus
 from core.state import state
 from network.udp_client import UdpClient
-
-MODE_MANUAL = 0
-MODE_AUTONOMOUS = 1
-MODE_NAV2 = 2
-
-_MODE_NAME = {
-    MODE_MANUAL: "manual",
-    MODE_AUTONOMOUS: "autonomous",
-    MODE_NAV2: "nav2",
-}
-
 
 MAX_SPEED = 32767  # algo menos que int16 para margen
 
@@ -88,16 +78,14 @@ class JoystickMapper(QObject):
         btn1 = buttons[1] if len(buttons) > 1 else False
         if btn1 and not self._last_mode_btn:
             new_mode = MODE_MANUAL if state.drive_mode == "autonomous" else MODE_AUTONOMOUS
-            state.drive_mode = _MODE_NAME[new_mode]
-            bus.mode_switch_requested.emit(new_mode)
+            set_drive_mode(new_mode)
         self._last_mode_btn = btn1
 
         # Detección de flanco en botón 2 (Square) → alternar modo manual/nav2
         btn2 = buttons[2] if len(buttons) > 2 else False
         if btn2 and not self._last_nav2_btn:
             new_mode = MODE_MANUAL if state.drive_mode == "nav2" else MODE_NAV2
-            state.drive_mode = _MODE_NAME[new_mode]
-            bus.mode_switch_requested.emit(new_mode)
+            set_drive_mode(new_mode)
         self._last_nav2_btn = btn2
 
     @pyqtSlot(str, str)
