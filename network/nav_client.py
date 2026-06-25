@@ -148,3 +148,7 @@ class NavClient(QThread):
         elif mtype == "nav_status":
             state.last_nav_status = data
             bus.nav_status_changed.emit(data)
+        elif mtype == "map_name":
+            name = str(data.get("name", "")).strip()
+            if name:
+                bus.map_name_received.emit(name)

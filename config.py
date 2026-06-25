@@ -58,6 +58,22 @@ class VideoConfig:
 
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
+# Mapas disponibles localmente (nombre -> (pgm, yaml)).
+# El nombre debe coincidir con el argumento map_name:=<name> del launch file.
+# Values: (pgm_path, yaml_path, markers_db_path_or_None)
+AVAILABLE_MAPS: dict[str, tuple] = {
+    "small": (
+        os.path.join(_ASSETS_DIR, "test_map_small.pgm"),
+        os.path.join(_ASSETS_DIR, "test_map_small.yaml"),
+        None,
+    ),
+    "maze": (
+        os.path.join(_ASSETS_DIR, "test_map_maze.pgm"),
+        os.path.join(_ASSETS_DIR, "test_map_maze.yaml"),
+        os.path.join(_ASSETS_DIR, "markers_db_maze.yaml"),
+    ),
+}
+
 
 @dataclass(frozen=True)
 class NavConfig:
@@ -70,12 +86,9 @@ class NavConfig:
     # Si no llega pose en este tiempo, se marca la pose como obsoleta (ms)
     pose_stale_ms: int = 1000
 
-    # Assets del mapa para renderizar la GUI de forma autónoma. Copia del mapa
-    # "small" (capbot-ros/src/test_bot/config/test_map_small.*), que es el que
-    # carga NAV2 por defecto (robot.launch.py map_name:=small). Debe coincidir
-    # con el mapa activo para que pose y goals queden alineados.
-    map_pgm: str = os.path.join(_ASSETS_DIR, "test_map_small.pgm")
-    map_yaml: str = os.path.join(_ASSETS_DIR, "test_map_small.yaml")
+    # Mapa activo por defecto. Debe coincidir con map_name:=<name> del launch
+    # file. La UI permite cambiarlo en runtime; el robot lo anuncia al conectar.
+    default_map_name: str = "small"
 
 
 NETWORK = NetworkConfig()

@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import time
 
-from PyQt6.QtCore import Qt, QTimer, QPointF, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -25,6 +25,7 @@ from PyQt6.QtGui import (
     QPolygonF,
 )
 from PyQt6.QtWidgets import (
+    QComboBox,
     QDockWidget,
     QDoubleSpinBox,
     QGraphicsScene,
@@ -36,8 +37,9 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from config import NAV
-from core.occupancy_map import OccupancyMap, load_map
+import config
+from config import AVAILABLE_MAPS, NAV
+from core.occupancy_map import OccupancyMap, load_map, load_markers_db
 from core.signals import bus
 from core.state import state
 from widgets._common import color_for_state, format_state
@@ -59,6 +61,10 @@ _STALE_COLOR = QColor(130, 130, 130)     # gris (pose obsoleta)
 # Tamaños de los marcadores en unidades de escena (px del mapa); el zoom los escala.
 _ROBOT_R = 4.0
 _ARROW_LEN = 11.0
+
+_ARUCO_COLOR = QColor(0, 200, 220)   # cyan — distinct from robot (green) and goal (amber)
+_ARUCO_HALF = 2.5                     # half-side of the marker square in scene units
+_ARUCO_ARROW = 7.0                    # normal-direction arrow length
 
 
 class _MapView(QGraphicsView):
@@ -82,6 +88,7 @@ class _MapView(QGraphicsView):
         self._robot = None   # (x, y, yaw) o None
         self._robot_stale = False
         self._goal = None    # (x, y, yaw) o None
+        self._markers: list = []   # [{id, x, y, yaw}, ...]
 
         # Estado de arrastre del goal
         self._drag_start = None  # QPointF en escena
@@ -121,6 +128,10 @@ class _MapView(QGraphicsView):
         self._goal = None
         self.viewport().update()
 
+    def set_markers(self, markers: list) -> None:
+        self._markers = markers
+        self.viewport().update()
+
     # ---- Captura del goal (estilo rviz2) ----
     def mousePressEvent(self, ev) -> None:
         if ev.button() == Qt.MouseButton.LeftButton:
@@ -151,6 +162,8 @@ class _MapView(QGraphicsView):
 
     # ---- Dibujo de overlays sobre el mapa ----
     def drawForeground(self, painter: QPainter, rect) -> None:
+        for m in self._markers:
+            self._draw_aruco_marker(painter, m)
         if self._robot is not None:
             color = _STALE_COLOR if self._robot_stale else _ROBOT_COLOR
             self._draw_pose(painter, self._robot, color, filled=True)
@@ -162,6 +175,36 @@ class _MapView(QGraphicsView):
             pen.setCosmetic(True)
             painter.setPen(pen)
             painter.drawLine(self._drag_start, self._drag_cur)
+
+    def _draw_aruco_marker(self, painter: QPainter, m: dict) -> None:
+        x = float(m.get("x", 0.0))
+        y = float(m.get("y", 0.0))
+        yaw = float(m.get("yaw", 0.0))
+        mid = m.get("id", "?")
+        px, py = self._occ.world_to_pixel(x, y)
+
+        pen = QPen(_ARUCO_COLOR, 1.5)
+        pen.setCosmetic(True)
+        painter.setPen(pen)
+        painter.setBrush(QBrush(_ARUCO_COLOR.darker(180)))
+        painter.drawRect(QRectF(px - _ARUCO_HALF, py - _ARUCO_HALF,
+                                _ARUCO_HALF * 2, _ARUCO_HALF * 2))
+
+        # Arrow showing the direction the marker face points (normal direction)
+        painter.setBrush(QBrush(_ARUCO_COLOR))
+        tip = QPointF(px + _ARUCO_ARROW * math.cos(yaw),
+                      py - _ARUCO_ARROW * math.sin(yaw))
+        painter.drawLine(QPointF(px, py), tip)
+
+        # ID label
+        painter.save()
+        font = painter.font()
+        font.setPointSizeF(3.5)
+        font.setBold(True)
+        painter.setFont(font)
+        painter.setPen(QPen(_ARUCO_COLOR))
+        painter.drawText(QPointF(px + _ARUCO_HALF + 0.5, py - _ARUCO_HALF), str(mid))
+        painter.restore()
 
     def _draw_pose(self, painter: QPainter, pose, color: QColor, filled: bool) -> None:
         x, y, yaw = pose
@@ -197,29 +240,31 @@ class MapDock(QDockWidget):
         self.setAllowedAreas(Qt.DockWidgetArea.AllDockWidgetAreas)
 
         container = QWidget()
-        lay = QVBoxLayout(container)
-        lay.setContentsMargins(4, 4, 4, 4)
+        self._lay = QVBoxLayout(container)
+        self._lay.setContentsMargins(4, 4, 4, 4)
 
-        # ---- Carga del mapa ----
-        self._view = None
-        try:
-            occ = load_map(NAV.map_pgm, NAV.map_yaml)
-            self._view = _MapView(occ)
-            self._view.goal_drawn.connect(self._on_goal_drawn)
-            lay.addWidget(self._view, 1)
-        except (OSError, ValueError) as exc:
-            err = QLabel(f"No se pudo cargar el mapa:\n{exc}")
-            err.setStyleSheet("color:#d93f33; padding:8px;")
-            err.setWordWrap(True)
-            lay.addWidget(err, 1)
+        # ---- Selector de mapa ----
+        map_row = QHBoxLayout()
+        map_row.addWidget(QLabel("Mapa:"))
+        self._map_combo = QComboBox()
+        for name in AVAILABLE_MAPS:
+            self._map_combo.addItem(name)
+        map_row.addWidget(self._map_combo, 1)
+        self._lay.addLayout(map_row)
+
+        # ---- Contenedor intercambiable de la vista del mapa ----
+        self._view_container = QWidget()
+        self._view_container_lay = QVBoxLayout(self._view_container)
+        self._view_container_lay.setContentsMargins(0, 0, 0, 0)
+        self._lay.addWidget(self._view_container, 1)
 
         # ---- Estado ----
         self._conn_lbl = QLabel("Navegación: —")
         self._conn_lbl.setStyleSheet("font-size:11px; padding:2px;")
         self._status_lbl = QLabel("Sin objetivo")
         self._status_lbl.setStyleSheet("color:#aaa; font-size:11px; padding:2px;")
-        lay.addWidget(self._conn_lbl)
-        lay.addWidget(self._status_lbl)
+        self._lay.addWidget(self._conn_lbl)
+        self._lay.addWidget(self._status_lbl)
 
         # ---- Campos numéricos del goal ----
         coords = QHBoxLayout()
@@ -232,7 +277,7 @@ class MapDock(QDockWidget):
         coords.addWidget(self._y_spin)
         coords.addWidget(QLabel("θ"))
         coords.addWidget(self._th_spin)
-        lay.addLayout(coords)
+        self._lay.addLayout(coords)
 
         # ---- Botones ----
         btns = QHBoxLayout()
@@ -248,19 +293,23 @@ class MapDock(QDockWidget):
         btns.addWidget(self._send_btn)
         btns.addWidget(self._cancel_btn)
         btns.addWidget(self._fit_btn)
-        lay.addLayout(btns)
-
-        if self._view is None:
-            for w in (self._x_spin, self._y_spin, self._th_spin,
-                      self._send_btn, self._cancel_btn, self._fit_btn):
-                w.setEnabled(False)
+        self._lay.addLayout(btns)
 
         self.setWidget(container)
 
+        # Carga inicial del mapa
+        self._view: _MapView | None = None
+        self._load_map_view(NAV.default_map_name)
+        idx = self._map_combo.findText(NAV.default_map_name)
+        if idx >= 0:
+            self._map_combo.setCurrentIndex(idx)
+
         # ---- Señales ----
+        self._map_combo.currentTextChanged.connect(self._on_map_selected)
         bus.robot_pose_updated.connect(self._on_pose)
         bus.nav_status_changed.connect(self._on_nav_status)
         bus.nav_state_changed.connect(self._on_nav_state)
+        bus.map_name_received.connect(self._on_map_name_received)
         self._on_nav_state(state.nav_state, "")
 
         # ---- Timer de obsolescencia de pose ----
@@ -268,6 +317,75 @@ class MapDock(QDockWidget):
         self._stale_timer.setInterval(400)
         self._stale_timer.timeout.connect(self._check_stale)
         self._stale_timer.start()
+
+    # -------------------------------------------------------------
+    # Carga y recarga del mapa
+    # -------------------------------------------------------------
+    def _load_map_view(self, name: str) -> None:
+        """Carga el mapa `name` en el contenedor (crea _MapView o label de error)."""
+        entry = AVAILABLE_MAPS.get(name, (None, None, None))
+        pgm, yaml, markers_db = entry[0], entry[1], entry[2] if len(entry) > 2 else None
+        has_view = False
+        if pgm and yaml:
+            try:
+                occ = load_map(pgm, yaml)
+                new_view = _MapView(occ)
+                new_view.goal_drawn.connect(self._on_goal_drawn)
+                if markers_db:
+                    new_view.set_markers(load_markers_db(markers_db))
+                self._view_container_lay.addWidget(new_view)
+                self._view = new_view
+                has_view = True
+            except (OSError, ValueError) as exc:
+                self._view = None
+                err = QLabel(f"No se pudo cargar '{name}':\n{exc}")
+                err.setStyleSheet("color:#d93f33; padding:8px;")
+                err.setWordWrap(True)
+                self._view_container_lay.addWidget(err)
+        else:
+            self._view = None
+            err = QLabel(f"Mapa '{name}' no disponible localmente.")
+            err.setStyleSheet("color:#e3a008; padding:8px;")
+            err.setWordWrap(True)
+            self._view_container_lay.addWidget(err)
+
+        for w in (self._x_spin, self._y_spin, self._th_spin,
+                  self._send_btn, self._cancel_btn, self._fit_btn):
+            w.setEnabled(has_view)
+
+        # Persist the active selection in config so other modules can query it
+        object.__setattr__(config.NAV, "default_map_name", name)
+
+    def _reload_map(self, name: str) -> None:
+        """Descarta la vista actual y carga el mapa `name`."""
+        # Remove every widget inside the container
+        while self._view_container_lay.count():
+            item = self._view_container_lay.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.hide()
+                w.deleteLater()
+        self._view = None
+        self._load_map_view(name)
+
+    @pyqtSlot(str)
+    def _on_map_selected(self, name: str) -> None:
+        self._reload_map(name)
+
+    @pyqtSlot(str)
+    def _on_map_name_received(self, name: str) -> None:
+        """Auto-selecciona el mapa anunciado por el robot al conectar."""
+        if name not in AVAILABLE_MAPS:
+            self._status_lbl.setStyleSheet("color:#e3a008; font-size:11px; padding:2px;")
+            self._status_lbl.setText(f"Mapa del robot '{name}' no disponible localmente")
+            return
+        idx = self._map_combo.findText(name)
+        if idx >= 0 and self._map_combo.currentIndex() != idx:
+            # Block the signal to avoid double-reload; reload explicitly
+            self._map_combo.blockSignals(True)
+            self._map_combo.setCurrentIndex(idx)
+            self._map_combo.blockSignals(False)
+            self._reload_map(name)
 
     # -------------------------------------------------------------
     @staticmethod

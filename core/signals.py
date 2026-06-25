@@ -56,6 +56,8 @@ class SignalBus(QObject):
     nav_goal_requested = pyqtSignal(dict)
     # Cancelación del goal activo solicitada desde la UI
     nav_cancel_requested = pyqtSignal()
+    # Nombre del mapa recibido desde el robot (gui_bridge_node) al conectar
+    map_name_received = pyqtSignal(str)
 
 
 # Singleton
