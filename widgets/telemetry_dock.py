@@ -68,6 +68,7 @@ class TelemetryDock(QDockWidget):
 
         self._rows: dict[str, int] = {}
         self._history: list[dict] = []   # [{timestamp, key: value, ...}, ...]
+        self._stale_active = False       # si el aviso de "obsoleta" esta mostrado
 
         bus.telemetry_received.connect(self._on_telemetry)
         bus.rtt_updated.connect(self._on_rtt)
@@ -150,4 +151,11 @@ class TelemetryDock(QDockWidget):
             return
         age = time.time() - state.last_telemetry_ts
         if age > 1.0:
+            self._stale_active = True
             self._summary.setText(f"⚠ Telemetría obsoleta ({age:.1f}s sin datos)")
+        elif self._stale_active:
+            # Sin esto, el aviso de "obsoleta" queda pegado en pantalla para
+            # siempre despues de un unico hueco (arranque, hiccup de red),
+            # aunque la telemetria se haya normalizado.
+            self._stale_active = False
+            self._summary.setText("Telemetría OK")
