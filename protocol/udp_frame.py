@@ -10,6 +10,8 @@ Tipos de mensaje (convención propuesta, ajustable):
     0x01  CMD_MOTOR     payload = int16 left, int16 right, int16 aux (velocidades)
     0x02  CMD_HEARTBEAT payload = zeros
     0x03  CMD_EMERGENCY payload = zeros (paro de emergencia)
+    0x04  CMD_PID_PARAM payload = uint8 ctrl_id, uint8 param_id, float32 value
+    0x06  CMD_MODE      payload = uint8 mode, reservado
     0x81  ACK           payload[0..3] = seq que acusa, resto reservado
 """
 from __future__ import annotations
@@ -26,16 +28,14 @@ class MsgType(IntEnum):
     CMD_HEARTBEAT = 0x02
     CMD_EMERGENCY = 0x03
     CMD_PID_PARAM = 0x04      # payload: ctrl_id(1) param_id(1) float32(4)
-    CMD_SETPOINT_COMP = 0x05  # payload: comp_id(1) reserved(1) float32(4)
     CMD_MODE = 0x06           # payload: mode(1) reserved(5); 0=manual 1=autonomous
     ACK = 0x81
 
 
-# Controller IDs for CMD_PID_PARAM
-CTRL_LINEAR_POS = 0
-CTRL_LINEAR_VEL = 1
-CTRL_ANG_POS = 2
-CTRL_ANG_VEL = 3
+# Controller IDs for CMD_PID_PARAM (solo PIDs de velocidad: sin IMU ni lazo
+# de posicion on-board, la navegacion/pose vive en nav2 + EKF).
+CTRL_LINEAR_VEL = 0
+CTRL_ANG_VEL = 1
 
 # Parameter IDs for CMD_PID_PARAM
 PARAM_KP = 0
@@ -118,12 +118,6 @@ def build_pid_param(seq: int, ctrl_id: int, param_id: int, value: float) -> byte
     """One PID constant. ctrl_id / param_id use CTRL_* / PARAM_* constants."""
     payload = struct.pack("<BBf", ctrl_id & 0xFF, param_id & 0xFF, value)
     return Frame(MsgType.CMD_PID_PARAM, seq, payload).pack()
-
-
-def build_setpoint_comp(seq: int, comp_id: int, value: float) -> bytes:
-    """One setpoint component. comp_id: 0=xPos 1=yPos 2=angPos 3=linVel 4=angVel."""
-    payload = struct.pack("<BBf", comp_id & 0xFF, 0, value)
-    return Frame(MsgType.CMD_SETPOINT_COMP, seq, payload).pack()
 
 
 def build_mode_cmd(seq: int, mode: int) -> bytes:
