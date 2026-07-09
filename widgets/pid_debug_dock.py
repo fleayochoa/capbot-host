@@ -15,16 +15,16 @@ from PyQt6.QtWidgets import (
 
 from network.udp_client import UdpClient
 from protocol.udp_frame import (
-    CTRL_ANG_VEL,
-    CTRL_LINEAR_VEL,
+    CTRL_LEFT_WHEEL_VEL,
+    CTRL_RIGHT_WHEEL_VEL,
     PARAM_KD,
     PARAM_KI,
     PARAM_KP,
 )
 
 _CONTROLLERS = [
-    (CTRL_LINEAR_VEL, "linearVel"),
-    (CTRL_ANG_VEL,    "angVel"),
+    (CTRL_LEFT_WHEEL_VEL,  "leftWheel"),
+    (CTRL_RIGHT_WHEEL_VEL, "rightWheel"),
 ]
 _PARAMS = [
     (PARAM_KP, "Kp"),

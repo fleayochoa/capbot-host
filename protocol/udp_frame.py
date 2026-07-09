@@ -32,10 +32,13 @@ class MsgType(IntEnum):
     ACK = 0x81
 
 
-# Controller IDs for CMD_PID_PARAM (solo PIDs de velocidad: sin IMU ni lazo
-# de posicion on-board, la navegacion/pose vive en nav2 + EKF).
-CTRL_LINEAR_VEL = 0
-CTRL_ANG_VEL = 1
+# Controller IDs for CMD_PID_PARAM. El ESP32 ya no mezcla lineal/angular ni
+# hace cinemática: corre un PID de velocidad independiente por rueda (rad/s)
+# contra el setpoint que esp32_serial_bridge.py (capbot-ros-foxy) calcula a
+# partir de /cmd_vel (ctrl_id debe mantenerse sincronizado con
+# leftWheelPid/rightWheelPid en capbot-ESP32/lib/Control/Control.h).
+CTRL_LEFT_WHEEL_VEL = 0
+CTRL_RIGHT_WHEEL_VEL = 1
 
 # Parameter IDs for CMD_PID_PARAM
 PARAM_KP = 0

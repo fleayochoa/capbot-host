@@ -7,11 +7,12 @@ from __future__ import annotations
 
 from PyQt6.QtCore import QSettings, Qt, pyqtSlot
 from PyQt6.QtGui import QAction, QKeySequence
-from PyQt6.QtWidgets import QMainWindow, QMessageBox
+from PyQt6.QtWidgets import QApplication, QMainWindow, QMessageBox
 
 import config
 from controllers.joystick import JoystickController
 from controllers.joystick_mapper import JoystickMapper
+from controllers.keyboard_control import KeyboardController
 from network.nav_client import NavClient
 from network.udp_client import UdpClient
 from network.video_receiver import VideoReceiver
@@ -38,6 +39,8 @@ class MainWindow(QMainWindow):
         self.nav = NavClient(self)
         self.joystick = JoystickController(self)
         self.mapper = JoystickMapper(self.udp, self)
+        self.keyboard = KeyboardController(self.udp, self)
+        QApplication.instance().installEventFilter(self.keyboard)
 
         # ---------------- Docks ----------------
         self.video_dock = VideoDock(self)
@@ -124,6 +127,7 @@ class MainWindow(QMainWindow):
         self.joystick.start()
 
     def _stop_all(self) -> None:
+        self.keyboard.stop()
         self.joystick.stop()
         self.nav.stop()
         self.video.stop()

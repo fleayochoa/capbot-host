@@ -10,7 +10,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class NetworkConfig:
     # IP del Jetson Nano. Se puede sobrescribir en runtime desde la UI.
-    jetson_host: str = "10.198.148.195"
+    jetson_host: str = "192.168.1.120"
 
     # Puertos según especificación
     video_port: int = 5000
@@ -47,6 +47,14 @@ class JoystickConfig:
     reconnect_ms: int = 1000
     # Deadzone de ejes (-1..1)
     deadzone: float = 0.08
+
+
+@dataclass(frozen=True)
+class KeyboardConfig:
+    # Velocidad aplicada por rueda al mantener una tecla (fraccion de MAX_SPEED)
+    speed: float = 0.6
+    # Periodo de reenvio del comando mientras se mantiene una tecla (ms)
+    resend_ms: int = 100
 
 
 @dataclass(frozen=True)
@@ -94,5 +102,6 @@ class NavConfig:
 NETWORK = NetworkConfig()
 PROTOCOL = ProtocolConfig()
 JOYSTICK = JoystickConfig()
+KEYBOARD = KeyboardConfig()
 VIDEO = VideoConfig()
 NAV = NavConfig()

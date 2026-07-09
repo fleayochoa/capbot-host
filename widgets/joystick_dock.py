@@ -120,6 +120,8 @@ class JoystickDock(QDockWidget):
         text = f"<span style='color:{color}'>●</span> {format_state(st)}"
         if name:
             text += f" — {name}"
+        if st != "connected":
+            text += " — teclado: Q/A izq, E/R der"
         self._status.setText(text)
 
     @pyqtSlot(dict)
