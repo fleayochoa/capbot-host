@@ -73,7 +73,7 @@ AVAILABLE_MAPS: dict[str, tuple] = {
     "small": (
         os.path.join(_ASSETS_DIR, "test_map_small.pgm"),
         os.path.join(_ASSETS_DIR, "test_map_small.yaml"),
-        None,
+        os.path.join(_ASSETS_DIR, "markers_db_small.yaml"),
     ),
     "maze": (
         os.path.join(_ASSETS_DIR, "test_map_maze.pgm"),
