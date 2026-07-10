@@ -54,21 +54,25 @@ class JoystickMapper(QObject):
         axes = snap.get("axes", [])
         buttons = snap.get("buttons", [])
 
-        throttleLeft = -axes[1] if len(axes) > 1 else 0.0
-        throttleRight = -axes[3] if len(axes) > 3 else 0.0
-        
-        left = throttleLeft
-        right = throttleRight
-        left = max(-1.0, min(1.0, left))
-        right = max(-1.0, min(1.0, right))
+        # El joystick solo maneja motores en modo manual; en autónomo el
+        # setpoint lo maneja la pila de navegación (evita que ambos canales
+        # compitan por el mismo PID de rueda).
+        if state.drive_mode == "manual":
+            throttleLeft = -axes[1] if len(axes) > 1 else 0.0
+            throttleRight = -axes[3] if len(axes) > 3 else 0.0
 
-        l_int = int(left * MAX_SPEED)
-        r_int = int(right * MAX_SPEED)
+            left = throttleLeft
+            right = throttleRight
+            left = max(-1.0, min(1.0, left))
+            right = max(-1.0, min(1.0, right))
 
-        self._udp.send_motor(l_int, r_int, 0)
-        self._last_l, self._last_r = l_int, r_int
+            l_int = int(left * MAX_SPEED)
+            r_int = int(right * MAX_SPEED)
 
-        # Detección de flanco en botón 0 → emergencia
+            self._udp.send_motor(l_int, r_int, 0)
+            self._last_l, self._last_r = l_int, r_int
+
+        # Detección de flanco en botón 0 → emergencia (activo en cualquier modo)
         btn0 = buttons[0] if buttons else False
         if btn0 and not self._last_emergency_btn:
             bus.emergency_requested.emit()
@@ -84,14 +88,17 @@ class JoystickMapper(QObject):
 
     @pyqtSlot(str, str)
     def _on_joy_state(self, st: str, _name: str) -> None:
-        # Si se desconecta el mando, enviar STOP inmediato (seguro por defecto)
-        if st != "connected":
+        # Si se desconecta el mando en modo manual, enviar STOP inmediato
+        # (seguro por defecto). En autónomo el joystick ya no controla los
+        # motores, así que no hay nada que frenar por este canal.
+        if st != "connected" and state.drive_mode == "manual":
             self._udp.send_motor(0, 0, 0)
             self._last_l = self._last_r = 0
 
     def _tick_heartbeat(self) -> None:
-        # Si el joystick está desconectado y emergencia no activa, mandamos
-        # heartbeat. Si está conectado, los propios comandos de motor sirven
-        # de heartbeat para la Jetson.
-        if state.joystick_state != "connected":
+        # En manual, conectado, los propios comandos de motor sirven de
+        # heartbeat. En cualquier otro caso (desconectado, o conectado pero
+        # en autónomo donde ya no se manda CMD_MOTOR) mandamos heartbeat
+        # explícito para que la Jetson no nos dé por perdidos.
+        if state.joystick_state != "connected" or state.drive_mode != "manual":
             self._udp.send_heartbeat()

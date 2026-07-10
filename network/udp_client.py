@@ -26,9 +26,12 @@ from config import NETWORK
 from core.signals import bus
 from core.state import state
 from protocol.udp_frame import (
+    CTRL_LEFT_WHEEL_VEL,
+    CTRL_RIGHT_WHEEL_VEL,
     Frame,
     MsgType,
     build_emergency,
+    build_fixed_velocity,
     build_heartbeat,
     build_mode_cmd,
     build_motor_cmd,
@@ -136,6 +139,12 @@ class UdpClient(QObject):
         """Fire-and-forget: send all PID constants. params = [(ctrl_id, param_id, value), ...]"""
         for ctrl_id, param_id, value in params:
             self._send_raw(build_pid_param(self._next_seq(), ctrl_id, param_id, value))
+
+    def send_fixed_velocity(self, left: float, right: float) -> None:
+        """Fire-and-forget: setpoints fijos de velocidad (rad/s) por rueda,
+        para probar el PID sin joystick. La Jetson los reenvía al ESP32."""
+        for ctrl_id, value in ((CTRL_LEFT_WHEEL_VEL, left), (CTRL_RIGHT_WHEEL_VEL, right)):
+            self._send_raw(build_fixed_velocity(self._next_seq(), ctrl_id, value))
 
     def send_mode(self, mode: int) -> None:
         """Cambia modo de conducción: 0=manual, 1=autónomo. Con reintentos."""

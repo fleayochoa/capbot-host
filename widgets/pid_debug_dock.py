@@ -81,12 +81,43 @@ class PidDebugDock(QDockWidget):
         self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status.setStyleSheet("color:#aaa; font-size:10px; padding:2px;")
 
+        # ── Velocidad fija (setpoint directo, sin joystick) ────────────
+        vel_group = QGroupBox("Velocidad fija (rad/s)")
+        vel_lay = QGridLayout(vel_group)
+        vel_lay.setContentsMargins(6, 6, 6, 6)
+        vel_lay.setSpacing(4)
+
+        vel_lay.addWidget(QLabel("Izquierda"), 0, 0)
+        self._left_vel_input = QDoubleSpinBox()
+        self._left_vel_input.setRange(-999999.0, 999999.0)
+        self._left_vel_input.setDecimals(3)
+        self._left_vel_input.setSingleStep(0.1)
+        vel_lay.addWidget(self._left_vel_input, 0, 1)
+
+        vel_lay.addWidget(QLabel("Derecha"), 1, 0)
+        self._right_vel_input = QDoubleSpinBox()
+        self._right_vel_input.setRange(-999999.0, 999999.0)
+        self._right_vel_input.setDecimals(3)
+        self._right_vel_input.setSingleStep(0.1)
+        vel_lay.addWidget(self._right_vel_input, 1, 1)
+
+        self._send_vel_btn = QPushButton("Enviar Velocidad Fija")
+        self._send_vel_btn.setStyleSheet(_BTN_STYLE)
+        self._send_vel_btn.clicked.connect(self._on_send_fixed_velocity)
+
+        self._vel_status = QLabel("")
+        self._vel_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._vel_status.setStyleSheet("color:#aaa; font-size:10px; padding:2px;")
+
         container = QWidget()
         lay = QVBoxLayout(container)
         lay.setContentsMargins(6, 6, 6, 6)
         lay.addWidget(pid_group)
         lay.addWidget(self._send_pid_btn)
         lay.addWidget(self._status)
+        lay.addWidget(vel_group)
+        lay.addWidget(self._send_vel_btn)
+        lay.addWidget(self._vel_status)
         lay.addStretch(1)
         self.setWidget(container)
 
@@ -99,3 +130,10 @@ class PidDebugDock(QDockWidget):
         self._udp.send_pid_params(pid_params)
         self._status.setStyleSheet("color:#2ea043; font-size:10px; padding:2px;")
         self._status.setText("Constantes PID enviadas")
+
+    def _on_send_fixed_velocity(self) -> None:
+        left = self._left_vel_input.value()
+        right = self._right_vel_input.value()
+        self._udp.send_fixed_velocity(left, right)
+        self._vel_status.setStyleSheet("color:#2ea043; font-size:10px; padding:2px;")
+        self._vel_status.setText(f"Velocidad enviada: L={left:.3f} R={right:.3f} rad/s")

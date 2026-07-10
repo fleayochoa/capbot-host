@@ -11,6 +11,7 @@ Tipos de mensaje (convención propuesta, ajustable):
     0x02  CMD_HEARTBEAT payload = zeros
     0x03  CMD_EMERGENCY payload = zeros (paro de emergencia)
     0x04  CMD_PID_PARAM payload = uint8 ctrl_id, uint8 param_id, float32 value
+    0x05  CMD_FIXED_VEL payload = uint8 ctrl_id, reservado(1), float32 value (rad/s)
     0x06  CMD_MODE      payload = uint8 mode, reservado
     0x81  ACK           payload[0..3] = seq que acusa, resto reservado
 """
@@ -28,6 +29,7 @@ class MsgType(IntEnum):
     CMD_HEARTBEAT = 0x02
     CMD_EMERGENCY = 0x03
     CMD_PID_PARAM = 0x04      # payload: ctrl_id(1) param_id(1) float32(4)
+    CMD_FIXED_VEL = 0x05      # payload: ctrl_id(1) reserved(1) float32(4), rad/s
     CMD_MODE = 0x06           # payload: mode(1) reserved(5); 0=manual 1=autonomous
     ACK = 0x81
 
@@ -121,6 +123,13 @@ def build_pid_param(seq: int, ctrl_id: int, param_id: int, value: float) -> byte
     """One PID constant. ctrl_id / param_id use CTRL_* / PARAM_* constants."""
     payload = struct.pack("<BBf", ctrl_id & 0xFF, param_id & 0xFF, value)
     return Frame(MsgType.CMD_PID_PARAM, seq, payload).pack()
+
+
+def build_fixed_velocity(seq: int, ctrl_id: int, value: float) -> bytes:
+    """Setpoint fijo de velocidad (rad/s) para una rueda, para probar el PID a
+    lazo cerrado sin joystick. ctrl_id usa CTRL_LEFT_WHEEL_VEL / CTRL_RIGHT_WHEEL_VEL."""
+    payload = struct.pack("<Bxf", ctrl_id & 0xFF, value)
+    return Frame(MsgType.CMD_FIXED_VEL, seq, payload).pack()
 
 
 def build_mode_cmd(seq: int, mode: int) -> bytes:
