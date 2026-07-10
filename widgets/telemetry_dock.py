@@ -5,6 +5,11 @@ import csv
 import datetime
 import os
 import time
+from collections import deque
+
+_TELEMETRY_HZ = 50
+_HISTORY_SECONDS = 5 * 60
+_HISTORY_MAXLEN = _TELEMETRY_HZ * _HISTORY_SECONDS
 
 from PyQt6.QtCore import Qt, QTimer, pyqtSlot
 from PyQt6.QtWidgets import (
@@ -67,7 +72,7 @@ class TelemetryDock(QDockWidget):
         self.setWidget(container)
 
         self._rows: dict[str, int] = {}
-        self._history: list[dict] = []   # [{timestamp, key: value, ...}, ...]
+        self._history: deque[dict] = deque(maxlen=_HISTORY_MAXLEN)  # ultimos 5 min @ 50 Hz
         self._stale_active = False       # si el aviso de "obsoleta" esta mostrado
 
         bus.telemetry_received.connect(self._on_telemetry)
