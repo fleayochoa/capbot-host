@@ -66,12 +66,13 @@ class VideoConfig:
 
 @dataclass(frozen=True)
 class RobotConfig:
-    # Radio del chasis (footprint circular), medido. Usado para dibujar el
-    # robot a escala real en el mapa (widgets/map_dock.py). Mismo valor que
-    # `robot_radius` en nav2_params.yaml del stack ROS (capbot-ros-foxy);
-    # capbot-jetson no tiene hoy un equivalente (solo wheel_radius/
-    # wheel_separation, que son geometria de rueda, no el footprint).
-    radius_m: float = 0.22
+    # Footprint real del chasis: una caja de ~22x22 cm (no un circulo), medida
+    # a ojo. Usado para dibujar el robot a escala real en el mapa
+    # (widgets/map_dock.py). capbot-jetson no tiene hoy un equivalente (solo
+    # wheel_radius/wheel_separation, que son geometria de rueda, no el
+    # footprint completo del chasis).
+    length_m: float = 0.22   # adelante-atras (eje de avance)
+    width_m: float = 0.22    # izquierda-derecha
 
 
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")

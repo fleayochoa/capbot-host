@@ -211,32 +211,51 @@ class _MapView(QGraphicsView):
         px, py = self._occ.world_to_pixel(x, y)
         center = QPointF(px, py)
 
-        # Footprint a escala real: radio en unidades de escena (px del mapa)
-        # a partir del radio físico del robot y la resolución (m/px) del
-        # mapa activo, así se ve del tamaño correcto sea cual sea el mapa.
-        radius_px = ROBOT.radius_m / self._occ.resolution
+        # Footprint a escala real: caja orientada (no un círculo). Medio-largo
+        # (eje de avance) y medio-ancho en unidades de escena (px del mapa),
+        # a partir de las dimensiones físicas del chasis y la resolución
+        # (m/px) del mapa activo, así se ve del tamaño correcto en cualquier mapa.
+        res = self._occ.resolution
+        half_len = (ROBOT.length_m / 2.0) / res
+        half_wid = (ROBOT.width_m / 2.0) / res
+        cos_y, sin_y = math.cos(yaw), math.sin(yaw)
+
+        def _corner(fwd, left):
+            # (fwd, left) offset en el frame local del robot (metros ya
+            # convertidos a px) -> rotado por yaw al frame del mundo -> px
+            # de escena (+y mundo es -py en escena).
+            dx = fwd * cos_y - left * sin_y
+            dy = fwd * sin_y + left * cos_y
+            return QPointF(px + dx, py - dy)
+
+        box = QPolygonF([
+            _corner(half_len, half_wid),
+            _corner(half_len, -half_wid),
+            _corner(-half_len, -half_wid),
+            _corner(-half_len, half_wid),
+        ])
 
         pen = QPen(color, 2)
         pen.setCosmetic(True)
         painter.setPen(pen)
         painter.setBrush(QBrush(color) if filled else QBrush(Qt.BrushStyle.NoBrush))
-        painter.drawEllipse(center, radius_px, radius_px)
+        painter.drawPolygon(box)
 
-        # Flecha de orientación. En escena, +x mundo apunta a +px; +y mundo
-        # apunta a -py (la imagen está invertida en Y).
-        arrow_len = radius_px * _ARROW_LEN_FACTOR
+        # Flecha de orientación (la caja sola no distingue frente/atrás si es
+        # cuadrada). En escena, +x mundo apunta a +px; +y mundo apunta a -py.
+        arrow_len = half_len * _ARROW_LEN_FACTOR
         tip = QPointF(px + arrow_len * math.cos(yaw),
                       py - arrow_len * math.sin(yaw))
         painter.drawLine(center, tip)
         # Cabeza de flecha
         ang = math.atan2(-(tip.y() - py), tip.x() - px)
-        head = radius_px
-        left = QPointF(tip.x() - head * math.cos(ang - 0.5),
-                       tip.y() + head * math.sin(ang - 0.5))
-        right = QPointF(tip.x() - head * math.cos(ang + 0.5),
-                        tip.y() + head * math.sin(ang + 0.5))
+        head = half_len
+        head_left = QPointF(tip.x() - head * math.cos(ang - 0.5),
+                            tip.y() + head * math.sin(ang - 0.5))
+        head_right = QPointF(tip.x() - head * math.cos(ang + 0.5),
+                             tip.y() + head * math.sin(ang + 0.5))
         painter.setBrush(QBrush(color))
-        painter.drawPolygon(QPolygonF([tip, left, right]))
+        painter.drawPolygon(QPolygonF([tip, head_left, head_right]))
 
 
 class MapDock(QDockWidget):
