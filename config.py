@@ -64,6 +64,16 @@ class VideoConfig:
     fps: int = 30
 
 
+@dataclass(frozen=True)
+class RobotConfig:
+    # Radio del chasis (footprint circular), medido. Usado para dibujar el
+    # robot a escala real en el mapa (widgets/map_dock.py). Mismo valor que
+    # `robot_radius` en nav2_params.yaml del stack ROS (capbot-ros-foxy);
+    # capbot-jetson no tiene hoy un equivalente (solo wheel_radius/
+    # wheel_separation, que son geometria de rueda, no el footprint).
+    radius_m: float = 0.22
+
+
 _ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 # Mapas disponibles localmente (nombre -> (pgm, yaml)).
@@ -105,3 +115,4 @@ JOYSTICK = JoystickConfig()
 KEYBOARD = KeyboardConfig()
 VIDEO = VideoConfig()
 NAV = NavConfig()
+ROBOT = RobotConfig()

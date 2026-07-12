@@ -38,7 +38,7 @@ from PyQt6.QtWidgets import (
 )
 
 import config
-from config import AVAILABLE_MAPS, NAV
+from config import AVAILABLE_MAPS, NAV, ROBOT
 from core.occupancy_map import OccupancyMap, load_map, load_markers_db
 from core.signals import bus
 from core.state import state
@@ -58,9 +58,9 @@ _ROBOT_COLOR = QColor(46, 160, 67)       # verde
 _GOAL_COLOR = QColor(227, 160, 8)        # ámbar
 _STALE_COLOR = QColor(130, 130, 130)     # gris (pose obsoleta)
 
-# Tamaños de los marcadores en unidades de escena (px del mapa); el zoom los escala.
-_ROBOT_R = 4.0
-_ARROW_LEN = 11.0
+# Flecha de orientación como múltiplo del radio real del robot (proporción
+# visual fija, sea cual sea la resolución del mapa activo).
+_ARROW_LEN_FACTOR = 2.75
 
 _ARUCO_COLOR = QColor(0, 200, 220)   # cyan — distinct from robot (green) and goal (amber)
 _ARUCO_HALF = 2.5                     # half-side of the marker square in scene units
@@ -211,20 +211,26 @@ class _MapView(QGraphicsView):
         px, py = self._occ.world_to_pixel(x, y)
         center = QPointF(px, py)
 
+        # Footprint a escala real: radio en unidades de escena (px del mapa)
+        # a partir del radio físico del robot y la resolución (m/px) del
+        # mapa activo, así se ve del tamaño correcto sea cual sea el mapa.
+        radius_px = ROBOT.radius_m / self._occ.resolution
+
         pen = QPen(color, 2)
         pen.setCosmetic(True)
         painter.setPen(pen)
         painter.setBrush(QBrush(color) if filled else QBrush(Qt.BrushStyle.NoBrush))
-        painter.drawEllipse(center, _ROBOT_R, _ROBOT_R)
+        painter.drawEllipse(center, radius_px, radius_px)
 
         # Flecha de orientación. En escena, +x mundo apunta a +px; +y mundo
         # apunta a -py (la imagen está invertida en Y).
-        tip = QPointF(px + _ARROW_LEN * math.cos(yaw),
-                      py - _ARROW_LEN * math.sin(yaw))
+        arrow_len = radius_px * _ARROW_LEN_FACTOR
+        tip = QPointF(px + arrow_len * math.cos(yaw),
+                      py - arrow_len * math.sin(yaw))
         painter.drawLine(center, tip)
         # Cabeza de flecha
         ang = math.atan2(-(tip.y() - py), tip.x() - px)
-        head = 4.0
+        head = radius_px
         left = QPointF(tip.x() - head * math.cos(ang - 0.5),
                        tip.y() + head * math.sin(ang - 0.5))
         right = QPointF(tip.x() - head * math.cos(ang + 0.5),
