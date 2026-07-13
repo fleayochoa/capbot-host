@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 import time
 
-from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, QPointF, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -39,7 +39,7 @@ from PyQt6.QtWidgets import (
 
 import config
 from config import AVAILABLE_MAPS, NAV, ROBOT
-from core.occupancy_map import OccupancyMap, load_map, load_markers_db
+from core.occupancy_map import OccupancyMap, load_map
 from core.signals import bus
 from core.state import state
 from widgets._common import color_for_state, format_state
@@ -61,10 +61,6 @@ _STALE_COLOR = QColor(130, 130, 130)     # gris (pose obsoleta)
 # Flecha de orientación como múltiplo del radio real del robot (proporción
 # visual fija, sea cual sea la resolución del mapa activo).
 _ARROW_LEN_FACTOR = 2.75
-
-_ARUCO_COLOR = QColor(0, 200, 220)   # cyan — distinct from robot (green) and goal (amber)
-_ARUCO_HALF = 2.5                     # half-side of the marker square in scene units
-_ARUCO_ARROW = 7.0                    # normal-direction arrow length
 
 
 class _MapView(QGraphicsView):
@@ -88,7 +84,6 @@ class _MapView(QGraphicsView):
         self._robot = None   # (x, y, yaw) o None
         self._robot_stale = False
         self._goal = None    # (x, y, yaw) o None
-        self._markers: list = []   # [{id, x, y, yaw}, ...]
 
         # Estado de arrastre del goal
         self._drag_start = None  # QPointF en escena
@@ -128,10 +123,6 @@ class _MapView(QGraphicsView):
         self._goal = None
         self.viewport().update()
 
-    def set_markers(self, markers: list) -> None:
-        self._markers = markers
-        self.viewport().update()
-
     # ---- Captura del goal (estilo rviz2) ----
     def mousePressEvent(self, ev) -> None:
         if ev.button() == Qt.MouseButton.LeftButton:
@@ -162,8 +153,6 @@ class _MapView(QGraphicsView):
 
     # ---- Dibujo de overlays sobre el mapa ----
     def drawForeground(self, painter: QPainter, rect) -> None:
-        for m in self._markers:
-            self._draw_aruco_marker(painter, m)
         if self._robot is not None:
             color = _STALE_COLOR if self._robot_stale else _ROBOT_COLOR
             self._draw_pose(painter, self._robot, color, filled=True)
@@ -175,36 +164,6 @@ class _MapView(QGraphicsView):
             pen.setCosmetic(True)
             painter.setPen(pen)
             painter.drawLine(self._drag_start, self._drag_cur)
-
-    def _draw_aruco_marker(self, painter: QPainter, m: dict) -> None:
-        x = float(m.get("x", 0.0))
-        y = float(m.get("y", 0.0))
-        yaw = float(m.get("yaw", 0.0))
-        mid = m.get("id", "?")
-        px, py = self._occ.world_to_pixel(x, y)
-
-        pen = QPen(_ARUCO_COLOR, 1.5)
-        pen.setCosmetic(True)
-        painter.setPen(pen)
-        painter.setBrush(QBrush(_ARUCO_COLOR.darker(180)))
-        painter.drawRect(QRectF(px - _ARUCO_HALF, py - _ARUCO_HALF,
-                                _ARUCO_HALF * 2, _ARUCO_HALF * 2))
-
-        # Arrow showing the direction the marker face points (normal direction)
-        painter.setBrush(QBrush(_ARUCO_COLOR))
-        tip = QPointF(px + _ARUCO_ARROW * math.cos(yaw),
-                      py - _ARUCO_ARROW * math.sin(yaw))
-        painter.drawLine(QPointF(px, py), tip)
-
-        # ID label
-        painter.save()
-        font = painter.font()
-        font.setPointSizeF(3.5)
-        font.setBold(True)
-        painter.setFont(font)
-        painter.setPen(QPen(_ARUCO_COLOR))
-        painter.drawText(QPointF(px + _ARUCO_HALF + 0.5, py - _ARUCO_HALF), str(mid))
-        painter.restore()
 
     def _draw_pose(self, painter: QPainter, pose, color: QColor, filled: bool) -> None:
         x, y, yaw = pose
@@ -348,16 +307,14 @@ class MapDock(QDockWidget):
     # -------------------------------------------------------------
     def _load_map_view(self, name: str) -> None:
         """Carga el mapa `name` en el contenedor (crea _MapView o label de error)."""
-        entry = AVAILABLE_MAPS.get(name, (None, None, None))
-        pgm, yaml, markers_db = entry[0], entry[1], entry[2] if len(entry) > 2 else None
+        entry = AVAILABLE_MAPS.get(name, (None, None))
+        pgm, yaml = entry[0], entry[1]
         has_view = False
         if pgm and yaml:
             try:
                 occ = load_map(pgm, yaml)
                 new_view = _MapView(occ)
                 new_view.goal_drawn.connect(self._on_goal_drawn)
-                if markers_db:
-                    new_view.set_markers(load_markers_db(markers_db))
                 self._view_container_lay.addWidget(new_view)
                 self._view = new_view
                 has_view = True

@@ -121,41 +121,6 @@ def _parse_yaml(path: str) -> dict:
     return out
 
 
-def load_markers_db(path: str) -> list:
-    """Parse a markers_db.yaml. Returns list of dicts with keys id, x, y, yaw."""
-    markers: list = []
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-    except OSError:
-        return markers
-    current: dict | None = None
-    for raw in lines:
-        line = raw.split("#", 1)[0].rstrip()
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if stripped.startswith("- id:"):
-            if current is not None:
-                markers.append(current)
-            try:
-                current = {"id": int(stripped.split(":", 1)[1].strip())}
-            except (ValueError, IndexError):
-                current = None
-        elif current is not None and ":" in stripped:
-            key, _, val = stripped.partition(":")
-            key = key.strip()
-            val = val.strip()
-            if key in ("x", "y", "z", "roll", "pitch", "yaw"):
-                try:
-                    current[key] = float(val)
-                except ValueError:
-                    pass
-    if current is not None:
-        markers.append(current)
-    return markers
-
-
 def load_map(pgm_path: str, yaml_path: str) -> OccupancyMap:
     """Carga un mapa de ocupación desde su .pgm (P5) y su .yaml asociado."""
     meta = _parse_yaml(yaml_path)

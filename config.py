@@ -79,17 +79,15 @@ _ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 
 # Mapas disponibles localmente (nombre -> (pgm, yaml)).
 # El nombre debe coincidir con el argumento map_name:=<name> del launch file.
-# Values: (pgm_path, yaml_path, markers_db_path_or_None)
+# Values: (pgm_path, yaml_path)
 AVAILABLE_MAPS: dict[str, tuple] = {
     "small": (
         os.path.join(_ASSETS_DIR, "test_map_small.pgm"),
         os.path.join(_ASSETS_DIR, "test_map_small.yaml"),
-        os.path.join(_ASSETS_DIR, "markers_db_small.yaml"),
     ),
     "maze": (
         os.path.join(_ASSETS_DIR, "test_map_maze.pgm"),
         os.path.join(_ASSETS_DIR, "test_map_maze.yaml"),
-        os.path.join(_ASSETS_DIR, "markers_db_maze.yaml"),
     ),
 }
 
