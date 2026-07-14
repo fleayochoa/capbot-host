@@ -177,3 +177,6 @@ class NavClient(QThread):
             bus.walls_received.emit(data)
         elif mtype == "wall_result":
             bus.wall_result_received.emit(data)
+        elif mtype == "obstacles":
+            state.last_obstacles = data
+            bus.obstacles_received.emit(data)

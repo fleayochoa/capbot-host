@@ -67,6 +67,10 @@ class SignalBus(QObject):
     # Edición solicitada desde la UI: {action: "add"|"remove"|"reset", o?, i?, j?}
     wall_edit_requested = pyqtSignal(dict)
 
+    # ---------- Obstáculos detectados por la DNN ----------
+    # Celdas de 30 cm bloqueadas por objetos (desde el robot): {map, cells:[[i,j],..]}
+    obstacles_received = pyqtSignal(dict)
+
 
 # Singleton
 bus = SignalBus()

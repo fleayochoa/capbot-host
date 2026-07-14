@@ -22,7 +22,7 @@ from __future__ import annotations
 import math
 import time
 
-from PyQt6.QtCore import Qt, QTimer, QPointF, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -68,6 +68,9 @@ _ROBOT_COLOR = QColor(46, 160, 67)       # verde
 _GOAL_COLOR = QColor(227, 160, 8)        # ámbar
 _STALE_COLOR = QColor(130, 130, 130)     # gris (pose obsoleta)
 _WALL_PICK_COLOR = QColor(88, 166, 255)  # azul (segmento bajo el menú contextual)
+# Celdas bloqueadas por obstáculos detectados por la DNN del robot
+_OBSTACLE_FILL = QColor(217, 63, 51, 80)   # rojo translúcido
+_OBSTACLE_EDGE = QColor(217, 63, 51)
 
 # Flecha de orientación como múltiplo del radio real del robot (proporción
 # visual fija, sea cual sea la resolución del mapa activo).
@@ -113,6 +116,9 @@ class _MapView(QGraphicsView):
         self._walls: set | None = None
         self._edit_seg = None  # segmento resaltado mientras el menú está abierto
 
+        # Celdas bloqueadas por obstáculos de la DNN: (i, j) de la rejilla.
+        self._obstacle_cells: set[tuple[int, int]] = set()
+
         # Estado de arrastre del goal
         self._drag_start = None  # QPointF en escena
         self._drag_cur = None
@@ -136,6 +142,14 @@ class _MapView(QGraphicsView):
         pixels = maze_walls.render_walls(self._occ, self._grid, self._walls)
         self._map_item.setPixmap(
             self._build_pixmap(pixels, self._occ.width, self._occ.height))
+
+    # ---- Celdas de obstáculo (DNN) ----
+    def set_obstacle_cells(self, cells: set[tuple[int, int]]) -> None:
+        """Celdas bloqueadas anunciadas por el robot (autoritativo)."""
+        if self._grid is None:
+            return
+        self._obstacle_cells = set(cells)
+        self.viewport().update()
 
     def fit(self) -> None:
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
@@ -234,6 +248,22 @@ class _MapView(QGraphicsView):
 
     # ---- Dibujo de overlays sobre el mapa ----
     def drawForeground(self, painter: QPainter, rect) -> None:
+        # Celdas bloqueadas por obstáculos (debajo de robot/goal).
+        if self._obstacle_cells and self._grid is not None:
+            g = self._grid
+            pen = QPen(_OBSTACLE_EDGE, 2)
+            pen.setCosmetic(True)
+            for ci, cj in self._obstacle_cells:
+                x0 = g.x0 + ci * g.cell_m
+                y0 = g.y0 + cj * g.cell_m
+                # Esquina superior-izquierda en escena = (x0, y0+cell) mundo.
+                tlx, tly = self._occ.world_to_pixel(x0, y0 + g.cell_m)
+                brx, bry = self._occ.world_to_pixel(x0 + g.cell_m, y0)
+                cell_rect = QRectF(QPointF(tlx, tly), QPointF(brx, bry))
+                painter.fillRect(cell_rect, _OBSTACLE_FILL)
+                painter.setPen(pen)
+                painter.setBrush(QBrush(Qt.BrushStyle.NoBrush))
+                painter.drawRect(cell_rect)
         if self._robot is not None:
             color = _STALE_COLOR if self._robot_stale else _ROBOT_COLOR
             self._draw_pose(painter, self._robot, color, filled=True)
@@ -387,6 +417,7 @@ class MapDock(QDockWidget):
         bus.map_name_received.connect(self._on_map_name_received)
         bus.walls_received.connect(self._on_walls)
         bus.wall_result_received.connect(self._on_wall_result)
+        bus.obstacles_received.connect(self._on_obstacles)
         self._on_nav_state(state.nav_state, "")
 
         # ---- Timer de obsolescencia de pose ----
@@ -416,6 +447,9 @@ class MapDock(QDockWidget):
                 # (la vista se recrea al cambiar de mapa o reconectar).
                 if state.last_walls.get("map") == name:
                     self._apply_walls_state(state.last_walls)
+                # Ídem con las celdas de obstáculo detectadas por la DNN.
+                if state.last_obstacles.get("map") == name:
+                    self._apply_obstacles_state(state.last_obstacles)
             except (OSError, ValueError) as exc:
                 self._view = None
                 err = QLabel(f"No se pudo cargar '{name}':\n{exc}")
@@ -540,6 +574,30 @@ class MapDock(QDockWidget):
                 "color:#2ea043; font-size:11px; padding:2px;")
             self._status_lbl.setText("Paredes sincronizadas con el robot")
 
+    # ---- Celdas bloqueadas por obstáculos (DNN) ----
+    @pyqtSlot(dict)
+    def _on_obstacles(self, data: dict) -> None:
+        if data.get("map") != self._map_combo.currentText():
+            return
+        self._apply_obstacles_state(data)
+
+    def _apply_obstacles_state(self, data: dict) -> None:
+        """Aplica un estado {map, cells:[[i,j],..]} a la vista actual."""
+        if self._view is None or self._view._grid is None:
+            return
+        grid = self._view._grid
+        cells: set[tuple[int, int]] = set()
+        for it in data.get("cells") or []:
+            if not (isinstance(it, (list, tuple)) and len(it) == 2):
+                continue
+            try:
+                ci, cj = int(it[0]), int(it[1])
+            except (TypeError, ValueError):
+                continue
+            if 0 <= ci < grid.cols and 0 <= cj < grid.rows:
+                cells.add((ci, cj))
+        self._view.set_obstacle_cells(cells)
+
     @pyqtSlot(dict)
     def _on_wall_result(self, data: dict) -> None:
         if data.get("ok", False):
@@ -584,6 +642,8 @@ class MapDock(QDockWidget):
         labels = {
             "accepted": ("Objetivo aceptado", "#e3a008"),
             "active": ("Navegando…", "#388bfd"),
+            "waiting": ("Obstáculo en la ruta — esperando a que se retire…",
+                        "#e3a008"),
             "succeeded": ("¡Objetivo alcanzado!", "#2ea043"),
             "aborted": ("Navegación abortada", "#d93f33"),
             "canceled": ("Navegación cancelada", "#aaa"),

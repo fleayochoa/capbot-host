@@ -31,6 +31,9 @@ class SystemState:
     # Último estado de paredes editables anunciado por el robot
     # ({map, walls, connected, unreachable}); vacío hasta el primer "walls".
     last_walls: dict = field(default_factory=dict)
+    # Últimas celdas bloqueadas por obstáculos de la DNN anunciadas por el
+    # robot ({map, cells:[[i,j],..]}); vacío hasta el primer "obstacles".
+    last_obstacles: dict = field(default_factory=dict)
 
     def mark_telemetry(self, data: dict) -> None:
         self.last_telemetry = data
