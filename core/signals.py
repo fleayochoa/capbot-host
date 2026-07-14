@@ -70,6 +70,10 @@ class SignalBus(QObject):
     # ---------- Obstáculos detectados por la DNN ----------
     # Celdas de 30 cm bloqueadas por objetos (desde el robot): {map, cells:[[i,j],..]}
     obstacles_received = pyqtSignal(dict)
+    # Detecciones crudas de la DNN para dibujar sobre el video:
+    # {stamp, fps, boxes:[{box:[x1,y1,x2,y2] normalizado 0..1, cls, conf,
+    #  clipped, dist_m|None}, ...]}
+    detections_received = pyqtSignal(dict)
 
 
 # Singleton
