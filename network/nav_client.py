@@ -38,6 +38,7 @@ class NavClient(QThread):
         # La UI emite estas señales; las convertimos en envíos por el socket.
         bus.nav_goal_requested.connect(self.send_goal)
         bus.nav_cancel_requested.connect(self.cancel)
+        bus.wall_edit_requested.connect(self.send_wall_edit)
 
     # -------------------------------------------------------------
     # API pública (thread-safe: agenda el envío en el loop asyncio)
@@ -53,6 +54,25 @@ class NavClient(QThread):
 
     def cancel(self) -> None:
         self._send_threadsafe(json.dumps({"type": "cancel"}))
+
+    def send_wall_edit(self, edit: dict) -> None:
+        """Edición de pared del maze: {action: add|remove|reset, o?, i?, j?}."""
+        action = edit.get("action")
+        if action == "reset":
+            payload = {"type": "wall_reset"}
+        elif action in ("add", "remove"):
+            try:
+                payload = {
+                    "type": "wall_add" if action == "add" else "wall_remove",
+                    "o": str(edit["o"]),
+                    "i": int(edit["i"]),
+                    "j": int(edit["j"]),
+                }
+            except (KeyError, TypeError, ValueError):
+                return
+        else:
+            return
+        self._send_threadsafe(json.dumps(payload))
 
     def _send_threadsafe(self, payload: str) -> None:
         if self._loop is None:
@@ -152,3 +172,8 @@ class NavClient(QThread):
             name = str(data.get("name", "")).strip()
             if name:
                 bus.map_name_received.emit(name)
+        elif mtype == "walls":
+            state.last_walls = data
+            bus.walls_received.emit(data)
+        elif mtype == "wall_result":
+            bus.wall_result_received.emit(data)

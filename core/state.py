@@ -28,6 +28,9 @@ class SystemState:
     last_pose: dict = field(default_factory=dict)  # {x, y, yaw, valid, stamp}
     last_pose_ts: float = 0.0
     last_nav_status: dict = field(default_factory=dict)
+    # Último estado de paredes editables anunciado por el robot
+    # ({map, walls, connected, unreachable}); vacío hasta el primer "walls".
+    last_walls: dict = field(default_factory=dict)
 
     def mark_telemetry(self, data: dict) -> None:
         self.last_telemetry = data

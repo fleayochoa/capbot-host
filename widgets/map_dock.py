@@ -8,6 +8,14 @@ Dos formas de fijar el goal (ambas emiten `bus.nav_goal_requested`):
 
 La pose llega por `bus.robot_pose_updated`; el estado de navegación por
 `bus.nav_status_changed`; el estado de conexión por `bus.nav_state_changed`.
+
+Edición de paredes (sólo mapas con rejilla de 30 cm, hoy "maze"): clic
+DERECHO cerca de una línea de la rejilla abre un menú contextual con
+"Quitar pared" (si hay una sección de 30 cm ahí) o "Agregar pared" (si no),
+más "Restaurar paredes originales". La edición se manda al robot por el WS
+de navegación (`bus.wall_edit_requested`); el robot la aplica a su planner
+A*, la persiste y difunde el estado (`bus.walls_received`), con el que esta
+vista re-renderiza el mapa. El perímetro es fijo.
 """
 from __future__ import annotations
 
@@ -32,6 +40,7 @@ from PyQt6.QtWidgets import (
     QGraphicsView,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -39,6 +48,7 @@ from PyQt6.QtWidgets import (
 
 import config
 from config import AVAILABLE_MAPS, NAV, ROBOT
+from core import maze_walls
 from core.occupancy_map import OccupancyMap, load_map
 from core.signals import bus
 from core.state import state
@@ -57,20 +67,32 @@ _CANCEL_STYLE = _BTN_STYLE.replace("#1f6feb", "#b3261e").replace(
 _ROBOT_COLOR = QColor(46, 160, 67)       # verde
 _GOAL_COLOR = QColor(227, 160, 8)        # ámbar
 _STALE_COLOR = QColor(130, 130, 130)     # gris (pose obsoleta)
+_WALL_PICK_COLOR = QColor(88, 166, 255)  # azul (segmento bajo el menú contextual)
 
 # Flecha de orientación como múltiplo del radio real del robot (proporción
 # visual fija, sea cual sea la resolución del mapa activo).
 _ARROW_LEN_FACTOR = 2.75
 
+# Distancia máxima (m) del clic derecho a una línea de la rejilla para
+# ofrecerle edición de pared (la celda mide 0.30 m: con 0.06 el centro de la
+# celda queda claramente fuera de toda línea).
+_WALL_PICK_TOL_M = 0.06
+
 
 class _MapView(QGraphicsView):
-    """Vista del mapa con overlays (robot/goal) y captura de goal por arrastre."""
+    """Vista del mapa con overlays (robot/goal) y captura de goal por arrastre.
+
+    Si el mapa tiene rejilla editable (`grid`), el clic derecho ofrece
+    agregar/quitar la sección de pared de 30 cm más cercana (ver módulo)."""
 
     goal_drawn = pyqtSignal(float, float, float)  # x, y, yaw(rad) en frame map
+    wall_edit = pyqtSignal(dict)  # {action: add|remove|reset, o?, i?, j?}
 
-    def __init__(self, occ: OccupancyMap, parent=None):
+    def __init__(self, occ: OccupancyMap,
+                 grid: maze_walls.MazeGrid | None = None, parent=None):
         super().__init__(parent)
         self._occ = occ
+        self._grid = grid
         self.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         self.setMouseTracking(True)
         self.setBackgroundBrush(QBrush(QColor(30, 30, 30)))
@@ -78,12 +100,18 @@ class _MapView(QGraphicsView):
         # Escena: 1 unidad = 1 píxel del mapa.
         self._scene = QGraphicsScene(0, 0, occ.width, occ.height, self)
         self.setScene(self._scene)
-        self._scene.addPixmap(self._build_pixmap(occ))
+        self._map_item = self._scene.addPixmap(
+            self._build_pixmap(occ.pixels, occ.width, occ.height))
 
         # Estado de overlays
         self._robot = None   # (x, y, yaw) o None
         self._robot_stale = False
         self._goal = None    # (x, y, yaw) o None
+
+        # Paredes editables: None hasta que el robot anuncie su estado
+        # (sin él no se sabe qué hay realmente en el robot → no se edita).
+        self._walls: set | None = None
+        self._edit_seg = None  # segmento resaltado mientras el menú está abierto
 
         # Estado de arrastre del goal
         self._drag_start = None  # QPointF en escena
@@ -93,10 +121,21 @@ class _MapView(QGraphicsView):
 
     # ---- Construcción del pixmap en escala de grises ----
     @staticmethod
-    def _build_pixmap(occ: OccupancyMap) -> QPixmap:
-        img = QImage(bytes(occ.pixels), occ.width, occ.height,
-                     occ.width, QImage.Format.Format_Grayscale8)
+    def _build_pixmap(pixels: bytes, width: int, height: int) -> QPixmap:
+        img = QImage(bytes(pixels), width, height,
+                     width, QImage.Format.Format_Grayscale8)
         return QPixmap.fromImage(img)
+
+    # ---- Paredes editables ----
+    def apply_walls(self, walls: set) -> None:
+        """Re-renderiza el mapa con el conjunto de paredes anunciado por el
+        robot (autoritativo) y habilita la edición por clic derecho."""
+        if self._grid is None:
+            return
+        self._walls = set(walls)
+        pixels = maze_walls.render_walls(self._occ, self._grid, self._walls)
+        self._map_item.setPixmap(
+            self._build_pixmap(pixels, self._occ.width, self._occ.height))
 
     def fit(self) -> None:
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
@@ -151,6 +190,48 @@ class _MapView(QGraphicsView):
         else:
             super().mouseReleaseEvent(ev)
 
+    # ---- Edición de paredes (clic derecho) ----
+    def contextMenuEvent(self, ev) -> None:
+        if self._grid is None:
+            super().contextMenuEvent(ev)
+            return
+        sp = self.mapToScene(self.viewport().mapFromGlobal(ev.globalPos()))
+        wx, wy = self._occ.pixel_to_world(sp.x(), sp.y())
+        seg = maze_walls.pick_segment(self._grid, wx, wy, _WALL_PICK_TOL_M)
+
+        menu = QMenu(self)
+        synced = self._walls is not None and state.nav_state == "connected"
+        if seg is not None:
+            if not maze_walls.is_interior(self._grid, seg):
+                act = menu.addAction("Pared del perímetro (fija)")
+                act.setEnabled(False)
+            elif self._walls is not None and seg in self._walls:
+                act = menu.addAction("Quitar pared")
+                act.setEnabled(synced)
+                o, i, j = seg
+                act.triggered.connect(lambda _=False, o=o, i=i, j=j: self.wall_edit.emit(
+                    {"action": "remove", "o": o, "i": i, "j": j}))
+            else:
+                act = menu.addAction("Agregar pared")
+                act.setEnabled(synced)
+                o, i, j = seg
+                act.triggered.connect(lambda _=False, o=o, i=i, j=j: self.wall_edit.emit(
+                    {"action": "add", "o": o, "i": i, "j": j}))
+            menu.addSeparator()
+        reset = menu.addAction("Restaurar paredes originales")
+        reset.setEnabled(synced)
+        reset.triggered.connect(lambda: self.wall_edit.emit({"action": "reset"}))
+        if not synced:
+            hint = menu.addAction("(requiere conexión de navegación)")
+            hint.setEnabled(False)
+
+        # Resaltar el segmento afectado mientras el menú está abierto.
+        self._edit_seg = seg
+        self.viewport().update()
+        menu.exec(ev.globalPos())
+        self._edit_seg = None
+        self.viewport().update()
+
     # ---- Dibujo de overlays sobre el mapa ----
     def drawForeground(self, painter: QPainter, rect) -> None:
         if self._robot is not None:
@@ -164,6 +245,16 @@ class _MapView(QGraphicsView):
             pen.setCosmetic(True)
             painter.setPen(pen)
             painter.drawLine(self._drag_start, self._drag_cur)
+        # Segmento de pared bajo el menú contextual
+        if self._edit_seg is not None and self._grid is not None:
+            (ax, ay), (bx, by) = maze_walls.segment_endpoints_world(
+                self._grid, self._edit_seg)
+            pa = QPointF(*self._occ.world_to_pixel(ax, ay))
+            pb = QPointF(*self._occ.world_to_pixel(bx, by))
+            pen = QPen(_WALL_PICK_COLOR, 4)
+            pen.setCosmetic(True)
+            painter.setPen(pen)
+            painter.drawLine(pa, pb)
 
     def _draw_pose(self, painter: QPainter, pose, color: QColor, filled: bool) -> None:
         x, y, yaw = pose
@@ -294,6 +385,8 @@ class MapDock(QDockWidget):
         bus.nav_status_changed.connect(self._on_nav_status)
         bus.nav_state_changed.connect(self._on_nav_state)
         bus.map_name_received.connect(self._on_map_name_received)
+        bus.walls_received.connect(self._on_walls)
+        bus.wall_result_received.connect(self._on_wall_result)
         self._on_nav_state(state.nav_state, "")
 
         # ---- Timer de obsolescencia de pose ----
@@ -313,11 +406,16 @@ class MapDock(QDockWidget):
         if pgm and yaml:
             try:
                 occ = load_map(pgm, yaml)
-                new_view = _MapView(occ)
+                new_view = _MapView(occ, grid=maze_walls.grid_for_map(name))
                 new_view.goal_drawn.connect(self._on_goal_drawn)
+                new_view.wall_edit.connect(self._on_wall_edit)
                 self._view_container_lay.addWidget(new_view)
                 self._view = new_view
                 has_view = True
+                # Si el robot ya anunció paredes para este mapa, aplicarlas
+                # (la vista se recrea al cambiar de mapa o reconectar).
+                if state.last_walls.get("map") == name:
+                    self._apply_walls_state(state.last_walls)
             except (OSError, ValueError) as exc:
                 self._view = None
                 err = QLabel(f"No se pudo cargar '{name}':\n{exc}")
@@ -408,6 +506,47 @@ class MapDock(QDockWidget):
             self._view.clear_goal()
         self._status_lbl.setStyleSheet("color:#aaa; font-size:11px; padding:2px;")
         self._status_lbl.setText("Objetivo cancelado")
+
+    # ---- Edición de paredes ----
+    @pyqtSlot(dict)
+    def _on_wall_edit(self, edit: dict) -> None:
+        """Edición pedida desde el menú contextual de la vista → robot."""
+        bus.wall_edit_requested.emit(edit)
+        labels = {"add": "Agregando pared…", "remove": "Quitando pared…",
+                  "reset": "Restaurando paredes originales…"}
+        self._status_lbl.setStyleSheet("color:#e3a008; font-size:11px; padding:2px;")
+        self._status_lbl.setText(labels.get(edit.get("action"), "Editando paredes…"))
+
+    @pyqtSlot(dict)
+    def _on_walls(self, data: dict) -> None:
+        if data.get("map") != self._map_combo.currentText():
+            return
+        self._apply_walls_state(data)
+
+    def _apply_walls_state(self, data: dict) -> None:
+        """Aplica un estado {walls, connected, unreachable} a la vista actual."""
+        if self._view is None or self._view._grid is None:
+            return
+        walls = maze_walls.parse_walls(data.get("walls"), self._view._grid)
+        self._view.apply_walls(walls)
+        if not data.get("connected", True):
+            n = int(data.get("unreachable", 0))
+            self._status_lbl.setStyleSheet(
+                "color:#e3a008; font-size:11px; padding:2px;")
+            self._status_lbl.setText(
+                f"Paredes actualizadas — ¡advertencia! {n} celda(s) inalcanzables")
+        else:
+            self._status_lbl.setStyleSheet(
+                "color:#2ea043; font-size:11px; padding:2px;")
+            self._status_lbl.setText("Paredes sincronizadas con el robot")
+
+    @pyqtSlot(dict)
+    def _on_wall_result(self, data: dict) -> None:
+        if data.get("ok", False):
+            return  # el broadcast "walls" que sigue actualiza vista y estado
+        reason = str(data.get("reason", "rechazado"))
+        self._status_lbl.setStyleSheet("color:#d93f33; font-size:11px; padding:2px;")
+        self._status_lbl.setText(f"Edición de pared rechazada: {reason}")
 
     # ---- Pose entrante ----
     @pyqtSlot(dict)

@@ -59,6 +59,14 @@ class SignalBus(QObject):
     # Nombre del mapa recibido desde el robot (gui_bridge_node) al conectar
     map_name_received = pyqtSignal(str)
 
+    # ---------- Edición de paredes del maze ----------
+    # Estado completo de paredes desde el robot: {map, walls, connected, unreachable}
+    walls_received = pyqtSignal(dict)
+    # Resultado de una edición: {ok, action, reason?}
+    wall_result_received = pyqtSignal(dict)
+    # Edición solicitada desde la UI: {action: "add"|"remove"|"reset", o?, i?, j?}
+    wall_edit_requested = pyqtSignal(dict)
+
 
 # Singleton
 bus = SignalBus()
